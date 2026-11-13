@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">مجتمع RESPECT</string>
+    <string name="channel_live_name">تنبيهات البث المباشر</string>
+    <string name="channel_live_desc">إشعارات فورية بصوت واهتزاز عند بدء بث الستريمرز المفضلين</string>
+    <string name="channel_monitor_name">مراقبة البث بالخلفية</string>
+    <string name="channel_monitor_desc">خدمة فحص حالة البث كل 15 ثانية عبر KICK API</string>
+</resources>

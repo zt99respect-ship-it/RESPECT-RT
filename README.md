@@ -1,11 +1,30 @@
-<div align="center">
+# RESPECT Community (مجتمع ريسبكت) — Android Native
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+تطبيق أندرويد أصلي بالكامل (**Kotlin + Jetpack Compose + Material 3**) لمجتمع **RESPECT (`com.respect.community`)**، يجمع بين بثوث **KICK** المباشرة، التايملاين الاجتماعي، مقاطع الكليبات، ومعرض الرسومات.
 
-  <h1>Built with AI Studio</h2>
+## المميزات الأساسية
+1. **دليل الستريمرز والاقتراحات**: استعراض ستريمرز مجتمع ريسبكت مع روابط KICK، حالة البث المباشر، وشخصيات كل ستريمر، مع نموذج لاقتراح ستريمرز جدد.
+2. **جدول البثوث والتوقعات**: جدول زمني للبثوث القادمة مع اللعبة/التصنيف والتوقعات وإدارة كاملة من لوحة الإدارة.
+3. **مشغل فيديو أصلي مع اختيار الجودة**: تشغيل بثوث HLS عبر AndroidX Media3 (`ExoPlayer`) مع اختيار جودة حقيقي (`Auto / 1080p / 720p / 480p`) عبر `DefaultTrackSelector` ووضع ملء الشاشة.
+4. **تسجيل الدخول عبر KICK OAuth2 والدردشة المباشرة**: ربط الحساب عبر Chrome Custom Tabs (`respect://oauth/callback`) واستقبال الدردشة المباشرة عبر Pusher WebSocket مع إمكانية إرسال الرسائل مباشرة.
+5. **التايملاين الاجتماعي**: منشورات نصية، صور، وفيديو، إعلانات رسمية من RESPECT، وتفاعل الإعجابات مع أدوات الإشراف (حذف منشورات وكتم مؤقت لمدة يوم).
+6. **غرفة السوالف العامة**: دردشة مجتمعية مخصصة للسوالف مع تطبيق الكتم الإداري.
+7. **تحليل البثوث**: قسم مخصص لتحليل البثوث الجارية وتقييمها من 1 إلى 10.
+8. **قسم الكليبات (نمط TikTok)**: تغذية فيديو عمودية (`VerticalPager`) بأفضل لحظات الستريمرز مع ExoPlayer.
+9. **معرض الرسومات (نمط Pinterest)**: شبكة متدرجة (`LazyVerticalStaggeredGrid`) لرسومات وإبداعات المجتمع.
+10. **إشعارات سريعة**: خدمة خلفية (`StreamMonitorService`) تفحص حالة القنوات كل 15 ثانية وترسل إشعارات عالية الأولوية بصوت واهتزاز.
+11. **البحث الموحد**: بحث فوري عبر الستريمرز، المنشورات، الكليبات، والرسومات.
+12. **الملف الشخصي ولوحة التحكم الإدارية**: تعديل الاسم والصورة والنبذة ومتابعة الستريمرز، مع لوحة إدارة كاملة للستريمرز، الاقتراحات، الجدول، التايملاين، الكليبات، والرسومات.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## التقنيات المستخدمة
+- **اللغة والواجهة**: Kotlin + Jetpack Compose + Material 3 (RTL عربية بالكامل، تصميم داكن `#0A0416` مع `#8B5CF6` و`#150A2E` وتأثيرات زجاجية عبر مكتبة **Haze**).
+- **البنية**: MVVM + Repository مع حقن اعتماد يدوي (`AppContainer`) بدون Hilt أو Koin.
+- **الشبكة والوسائط**: Retrofit + OkHttp + Gson + Media3 ExoPlayer + Coil.
+- **التخزين**: Room Database + DataStore Preferences.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+## بناء ملف APK عبر GitHub Actions
+يحتوي المشروع على سير عمل جاهز في `.github/workflows/build.yml`:
+1. إعداد JDK 17 و Android SDK و Gradle.
+2. إنشاء `debug.keystore` تلقائياً إذا لم يكن موجوداً.
+3. تشغيل `./gradlew assembleDebug --no-daemon`.
+4. رفع ملف APK الناتج باسم `RespectCommunity-debug`.

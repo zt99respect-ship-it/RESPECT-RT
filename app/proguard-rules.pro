@@ -1,0 +1,4 @@
+-keep class com.respect.community.data.remote.** { *; }
+-keep class com.respect.community.data.local.entity.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
