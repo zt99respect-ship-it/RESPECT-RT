@@ -18,6 +18,8 @@ object KickOAuthManager {
 
     private const val AUTHORIZE_ENDPOINT = "https://id.kick.com/oauth/authorize"
     private const val SCOPES = "user:read channel:read chat:write"
+    // تم تثبيت الرابط هنا ليتطابق مع لوحة تحكم KICK
+    private const val REDIRECT_URI = "https://docs.kick.com" 
 
     suspend fun launchOAuthLogin(context: Context, sessionManager: SessionManager) {
         val verifier = generateCodeVerifier()
@@ -29,7 +31,7 @@ object KickOAuthManager {
         val authUri = Uri.parse(AUTHORIZE_ENDPOINT).buildUpon()
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("client_id", BuildConfig.KICK_CLIENT_ID)
-            .appendQueryParameter("redirect_uri", BuildConfig.KICK_REDIRECT_URI)
+            .appendQueryParameter("redirect_uri", REDIRECT_URI) // استخدام الرابط المثبت
             .appendQueryParameter("scope", SCOPES)
             .appendQueryParameter("code_challenge", challenge)
             .appendQueryParameter("code_challenge_method", "S256")
