@@ -11,6 +11,7 @@ import com.respect.community.data.local.dao.ChatMessageDao
 import com.respect.community.data.local.dao.ClipDao
 import com.respect.community.data.local.dao.CommunityUserDao
 import com.respect.community.data.local.dao.ScheduleDao
+import com.respect.community.data.local.dao.StreamSnapshotDao
 import com.respect.community.data.local.dao.StreamerDao
 import com.respect.community.data.local.dao.SuggestionDao
 import com.respect.community.data.local.dao.TimelineDao
@@ -21,6 +22,7 @@ import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.ClipEntity
 import com.respect.community.data.local.entity.CommunityUserEntity
 import com.respect.community.data.local.entity.ScheduleEventEntity
+import com.respect.community.data.local.entity.StreamSnapshotEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.SuggestionEntity
 import com.respect.community.data.local.entity.TimelinePostEntity
@@ -28,6 +30,7 @@ import com.respect.community.data.local.entity.TimelinePostEntity
 @Database(
     entities = [
         StreamerEntity::class,
+        StreamSnapshotEntity::class,
         SuggestionEntity::class,
         ScheduleEventEntity::class,
         TimelinePostEntity::class,
@@ -38,11 +41,12 @@ import com.respect.community.data.local.entity.TimelinePostEntity
         BannedUserEntity::class,
         CommunityUserEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class CommunityDatabase : RoomDatabase() {
     abstract fun streamerDao(): StreamerDao
+    abstract fun streamSnapshotDao(): StreamSnapshotDao
     abstract fun suggestionDao(): SuggestionDao
     abstract fun scheduleDao(): ScheduleDao
     abstract fun timelineDao(): TimelineDao

@@ -50,6 +50,7 @@ data class KickV2ChannelResponse(
     @SerializedName("id") val id: Long? = null,
     @SerializedName("slug") val slug: String? = null,
     @SerializedName("playback_url") val playbackUrl: String? = null,
+    @SerializedName("followers_count") val followersCount: Int? = null,
     @SerializedName("user") val user: KickV2User? = null,
     @SerializedName("livestream") val livestream: KickV2Livestream? = null,
     @SerializedName("chatroom") val chatroom: KickV2Chatroom? = null

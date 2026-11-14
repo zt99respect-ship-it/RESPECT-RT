@@ -18,10 +18,12 @@ import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.ClipEntity
 import com.respect.community.data.local.entity.CommunityUserEntity
 import com.respect.community.data.local.entity.ScheduleEventEntity
+import com.respect.community.data.local.entity.StreamSnapshotEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.SuggestionEntity
 import com.respect.community.data.local.entity.TimelinePostEntity
 import com.respect.community.data.repository.CommunityRepository
+import com.respect.community.service.NotificationHelper
 import com.respect.community.service.StreamMonitorService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +35,23 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+enum class StatsPeriod(val label: String, val durationMs: Long) {
+    TODAY("اليوم", 24L * 60L * 60L * 1000L),
+    WEEK("هذا الأسبوع", 7L * 24L * 60L * 60L * 1000L),
+    MONTH("هذا الشهر", 30L * 24L * 60L * 60L * 1000L)
+}
+
+data class StreamerChartStat(
+    val slug: String,
+    val displayName: String,
+    val avatarUrl: String,
+    val peakViewers: Int,
+    val avgViewers: Int,
+    val streamedHours: Float,
+    val followerCount: Int,
+    val isLiveNow: Boolean
+)
 
 data class CommunitySearchResults(
     val streamers: List<StreamerEntity> = emptyList(),
@@ -48,6 +67,9 @@ class CommunityViewModel(
 ) : ViewModel() {
 
     val streamers: StateFlow<List<StreamerEntity>> = repository.streamersFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val streamSnapshots: StateFlow<List<StreamSnapshotEntity>> = repository.snapshotsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val suggestions: StateFlow<List<SuggestionEntity>> = repository.suggestionsFlow
@@ -89,6 +111,49 @@ class CommunityViewModel(
     val remoteSettings: StateFlow<RemoteSettingsState> = repository.remoteSettingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), RemoteSettingsState())
 
+    val hasMoreTimeline: StateFlow<Boolean> = repository.hasMoreTimeline
+
+    private val _selectedStatsPeriod = MutableStateFlow(StatsPeriod.TODAY)
+    val selectedStatsPeriod: StateFlow<StatsPeriod> = _selectedStatsPeriod.asStateFlow()
+
+    val statsRankings: StateFlow<List<StreamerChartStat>> = combine(
+        streamers,
+        streamSnapshots,
+        _selectedStatsPeriod
+    ) { streamerList, snapList, period ->
+        val cutoff = System.currentTimeMillis() - period.durationMs
+        val grouped = snapList.filter { it.recordedAtMs >= cutoff }.groupBy { it.streamerSlug }
+        val allSlugs = (streamerList.map { it.slug } + grouped.keys).distinct()
+
+        allSlugs.map { slug ->
+            val st = streamerList.firstOrNull { it.slug == slug }
+            val snaps = grouped[slug].orEmpty()
+            val liveSnaps = snaps.filter { it.isLive || it.viewerCount > 0 }
+            val peakFromSnaps = snaps.maxOfOrNull { it.viewerCount } ?: 0
+            val peak = maxOf(peakFromSnaps, st?.peakViewers ?: 0, st?.viewerCount ?: 0)
+            val avg = if (liveSnaps.isNotEmpty()) {
+                liveSnaps.map { it.viewerCount }.average().toInt()
+            } else {
+                st?.viewerCount ?: 0
+            }
+            val hours = (liveSnaps.size * 10f) / 60f
+            val followers = maxOf(
+                st?.followerCount ?: 0,
+                snaps.maxOfOrNull { it.followerCount } ?: 0
+            )
+            StreamerChartStat(
+                slug = slug,
+                displayName = st?.displayName ?: snaps.firstOrNull()?.streamerName ?: slug,
+                avatarUrl = st?.avatarUrl.orEmpty(),
+                peakViewers = peak,
+                avgViewers = avg,
+                streamedHours = hours,
+                followerCount = followers,
+                isLiveNow = st?.isLive == true
+            )
+        }.sortedByDescending { it.peakViewers }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -113,11 +178,53 @@ class CommunityViewModel(
     private val _isBusy = MutableStateFlow(false)
     val isBusy: StateFlow<Boolean> = _isBusy.asStateFlow()
 
+    private val _isInitialLoading = MutableStateFlow(true)
+    val isInitialLoading: StateFlow<Boolean> = _isInitialLoading.asStateFlow()
+
+    private val _isLoadingMorePosts = MutableStateFlow(false)
+    val isLoadingMorePosts: StateFlow<Boolean> = _isLoadingMorePosts.asStateFlow()
+
+    private val _networkError = MutableStateFlow<String?>(null)
+    val networkError: StateFlow<String?> = _networkError.asStateFlow()
+
+    private val _oauthWebUrl = MutableStateFlow<String?>(null)
+    val oauthWebUrl: StateFlow<String?> = _oauthWebUrl.asStateFlow()
+
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
     init {
-        refreshAllStreamers(silent = true)
+        initialBootSync()
+    }
+
+    fun initialBootSync() {
+        viewModelScope.launch {
+            _isInitialLoading.value = true
+            _networkError.value = null
+            val refreshRes = runCatching { repository.refreshAllStreamersAndRecordSnapshots() }
+            if (refreshRes.isFailure && streamers.value.isEmpty()) {
+                _networkError.value = "تعذر الاتصال بـ KICK API. تحقق من الإنترنت وحاول مجدداً."
+            }
+            repository.loadTimelineFirstPage()
+            _isInitialLoading.value = false
+        }
+    }
+
+    fun setStatsPeriod(period: StatsPeriod) {
+        _selectedStatsPeriod.value = period
+    }
+
+    fun refreshStatsFromKICK() {
+        viewModelScope.launch {
+            _isBusy.value = true
+            runCatching {
+                repository.refreshAllStreamersAndRecordSnapshots()
+                repository.syncRecentSnapshotsFromCloud()
+            }.onFailure {
+                _snackbarMessage.value = "تعذر تحديث إحصائيات KICK"
+            }
+            _isBusy.value = false
+        }
     }
 
     fun clearSnackbar() {
@@ -132,16 +239,22 @@ class CommunityViewModel(
     suspend fun uploadImageToTelegraph(context: Context, uri: Uri): Result<String> {
         val result = repository.uploadImageToTelegraph(context, uri)
         result.onFailure { _snackbarMessage.value = it.message ?: "فشل رفع الصورة إلى Telegraph" }
-        result.onSuccess { _snackbarMessage.value = "تم رفع الصورة عبر Telegraph بنجاح" }
+        result.onSuccess { _snackbarMessage.value = "تم ضغط ورفع الصورة عبر Telegraph بنجاح" }
         return result
     }
 
-    // --- Firebase Auth & Settings ---
+    // --- Firebase Auth & Email Verification ---
     fun signInFirebase(email: String, password: String) {
         viewModelScope.launch {
             _isBusy.value = true
             repository.signInFirebase(email, password)
-                .onSuccess { _snackbarMessage.value = "تم تسجيل الدخول بنجاح (${it.displayName})" }
+                .onSuccess {
+                    _snackbarMessage.value = if (it.isEmailVerified) {
+                        "تم تسجيل الدخول بنجاح (${it.displayName})"
+                    } else {
+                        "يرجى تفعيل بريدك الإلكتروني أولاً عبر الرابط المرسل"
+                    }
+                }
                 .onFailure { _snackbarMessage.value = it.message ?: "فشل تسجيل الدخول" }
             _isBusy.value = false
         }
@@ -151,8 +264,36 @@ class CommunityViewModel(
         viewModelScope.launch {
             _isBusy.value = true
             repository.signUpFirebase(email, password, displayName)
-                .onSuccess { _snackbarMessage.value = "تم إنشاء الحساب بنجاح!" }
+                .onSuccess {
+                    _snackbarMessage.value = "تم إنشاء الحساب وإرسال رابط التفعيل إلى بريدك الإلكتروني"
+                }
                 .onFailure { _snackbarMessage.value = it.message ?: "تعذر إنشاء الحساب" }
+            _isBusy.value = false
+        }
+    }
+
+    fun resendVerificationEmail() {
+        viewModelScope.launch {
+            _isBusy.value = true
+            repository.resendVerificationEmail()
+                .onSuccess { _snackbarMessage.value = "تم إعادة إرسال رابط التفعيل لبريدك" }
+                .onFailure { _snackbarMessage.value = it.message ?: "تعذر إرسال رابط التفعيل" }
+            _isBusy.value = false
+        }
+    }
+
+    fun checkEmailVerification() {
+        viewModelScope.launch {
+            _isBusy.value = true
+            repository.refreshVerificationStatus()
+                .onSuccess { verified ->
+                    _snackbarMessage.value = if (verified) {
+                        "تم تأكيد البريد الإلكتروني! أهلاً بك في RESPECT"
+                    } else {
+                        "لم يتم تأكيد البريد بعد. افحص صندوق الوارد أو الرسائل غير المرغوب فيها."
+                    }
+                }
+                .onFailure { _snackbarMessage.value = it.message ?: "تعذر التحقق" }
             _isBusy.value = false
         }
     }
@@ -168,7 +309,7 @@ class CommunityViewModel(
         viewModelScope.launch {
             _isBusy.value = true
             repository.refreshRemoteConfig()
-            _snackbarMessage.value = "تم تحديث إعدادات Remote Config"
+            _snackbarMessage.value = "تمت مزامنة Remote Config"
             _isBusy.value = false
         }
     }
@@ -176,30 +317,77 @@ class CommunityViewModel(
     fun saveGlobalSettings(settings: RemoteSettingsState) {
         viewModelScope.launch {
             repository.saveGlobalSettings(settings)
-            _snackbarMessage.value = "تم حفظ الإعدادات العامة في Firestore"
+            _snackbarMessage.value = "تم حفظ ونشر إعدادات التطبيق"
         }
     }
 
+    // --- Admin User Management ---
     fun updateUserRole(uid: String, role: String) {
         viewModelScope.launch {
             repository.updateUserRole(uid, role)
-            _snackbarMessage.value = "تم تحديث صلاحية العضو إلى $role"
+            _snackbarMessage.value = "تم تحديث الصلاحية إلى $role"
         }
     }
 
-    fun muteCommunityUser(uid: String, displayName: String, mute: Boolean, reason: String) {
+    fun setUserBannedOrMuted(uid: String, displayName: String, banned: Boolean, reason: String) {
         viewModelScope.launch {
-            repository.muteCommunityUser(uid, displayName, mute, reason)
-            _snackbarMessage.value = if (mute) "تم تقييد $displayName لمدة يوم" else "تم فك التقييد عن $displayName"
+            repository.setUserBannedOrMuted(uid, displayName, banned, reason)
+            _snackbarMessage.value = if (banned) "تم حظر/كتم $displayName" else "تم فك الحظر عن $displayName"
         }
+    }
+
+    fun deleteCommunityUser(uid: String) {
+        viewModelScope.launch {
+            repository.deleteCommunityUser(uid)
+            _snackbarMessage.value = "تم حذف حساب العضو من المجتمع"
+        }
+    }
+
+    // --- Admin Notification Center ---
+    fun sendBroadcastNotification(context: Context, title: String, body: String) {
+        if (title.isBlank() || body.isBlank()) {
+            _snackbarMessage.value = "أدخل عنوان ونص الإشعار"
+            return
+        }
+        viewModelScope.launch {
+            repository.sendBroadcastNotification(title, body)
+                .onSuccess {
+                    NotificationHelper.showCustomKickPush(context, title, body)
+                    _snackbarMessage.value = "تم إرسال الإشعار العام للجميع"
+                }
+                .onFailure { _snackbarMessage.value = it.message ?: "تعذر إرسال الإشعار" }
+        }
+    }
+
+    fun sendTargetedNotification(context: Context, targetUid: String, title: String, body: String) {
+        if (targetUid.isBlank() || title.isBlank() || body.isBlank()) {
+            _snackbarMessage.value = "اختر المستخدم وأدخل العنوان والنص"
+            return
+        }
+        viewModelScope.launch {
+            repository.sendTargetedNotification(targetUid, title, body)
+                .onSuccess {
+                    NotificationHelper.showCustomKickPush(context, title, body)
+                    _snackbarMessage.value = "تم إرسال الإشعار للمستخدم المحدد"
+                }
+                .onFailure { _snackbarMessage.value = it.message ?: "تعذر إرسال الإشعار" }
+        }
+    }
+
+    fun sendTestKickNotification(context: Context) {
+        NotificationHelper.showTestKickNotification(context)
+        _snackbarMessage.value = "تم إرسال إشعار KICK التجريبي!"
     }
 
     // --- Streamers & Suggestions ---
-    fun addStreamer(slug: String, characterNames: String = "") {
+    fun addStreamer(slug: String, characterNames: String = "", isGlobal: Boolean = false) {
         viewModelScope.launch {
             _isBusy.value = true
-            repository.addOrRefreshStreamer(slug, characterNames)
-                .onSuccess { _snackbarMessage.value = "تمت إضافة ${it.displayName} بنجاح" }
+            repository.addOrRefreshStreamer(slug, characterNames, isGlobal)
+                .onSuccess {
+                    _networkError.value = null
+                    _snackbarMessage.value = "تمت إضافة ${it.displayName} بنجاح"
+                }
                 .onFailure { _snackbarMessage.value = it.message ?: "تعذر العثور على القناة في KICK" }
             _isBusy.value = false
         }
@@ -208,20 +396,31 @@ class CommunityViewModel(
     fun refreshAllStreamers(silent: Boolean = false) {
         viewModelScope.launch {
             if (!silent) _isBusy.value = true
-            runCatching { repository.refreshAllStreamers() }
+            _networkError.value = null
+            runCatching { repository.refreshAllStreamersAndRecordSnapshots() }
                 .onSuccess { live ->
                     if (!silent && live.isNotEmpty()) {
-                        _snackbarMessage.value = "${live.first().displayName} بدأ البث المباشر!"
+                        _snackbarMessage.value = "${live.first().displayName} بدأ بثه!"
                     }
                 }
                 .onFailure {
-                    if (!silent) _snackbarMessage.value = "تعذر تحديث القنوات من KICK"
+                    if (!silent) {
+                        _networkError.value = "تعذر تحديث البثوث من KICK"
+                        _snackbarMessage.value = "تعذر تحديث القنوات من KICK"
+                    }
                 }
             if (!silent) _isBusy.value = false
         }
     }
 
     fun removeStreamer(slug: String) = viewModelScope.launch { repository.removeStreamer(slug) }
+    fun toggleNotifying(slug: String, notify: Boolean) = viewModelScope.launch {
+        repository.toggleNotifying(slug, notify)
+        _snackbarMessage.value = if (notify) "تم تفعيل تنبيهات البث" else "تم كتم تنبيهات البث"
+    }
+    fun toggleFeatured(slug: String, featured: Boolean) = viewModelScope.launch {
+        repository.toggleFeatured(slug, featured)
+    }
     fun toggleFavorite(slug: String, fav: Boolean) = viewModelScope.launch { repository.toggleFavorite(slug, fav) }
     fun toggleFollow(slug: String, follow: Boolean) = viewModelScope.launch { repository.toggleFollow(slug, follow) }
 
@@ -246,7 +445,7 @@ class CommunityViewModel(
     fun rejectSuggestion(id: Long) = viewModelScope.launch { repository.rejectSuggestion(id) }
     fun deleteSuggestion(id: Long) = viewModelScope.launch { repository.deleteSuggestion(id) }
 
-    // --- Schedule & Predictions ---
+    // --- Schedule ---
     fun saveScheduleEvent(
         id: Long = 0,
         streamerSlug: String,
@@ -278,7 +477,24 @@ class CommunityViewModel(
 
     fun deleteScheduleEvent(id: Long) = viewModelScope.launch { repository.deleteSchedule(id) }
 
-    // --- Social Timeline & Moderation ---
+    // --- Timeline Pagination (10 posts per load) & Moderation ---
+    fun loadNextTimelinePage() {
+        if (_isLoadingMorePosts.value || !hasMoreTimeline.value) return
+        viewModelScope.launch {
+            _isLoadingMorePosts.value = true
+            repository.loadNextTimelinePage()
+            _isLoadingMorePosts.value = false
+        }
+    }
+
+    fun refreshTimeline() {
+        viewModelScope.launch {
+            _isBusy.value = true
+            repository.loadTimelineFirstPage()
+            _isBusy.value = false
+        }
+    }
+
     fun createTimelinePost(
         content: String,
         mediaUrl: String,
@@ -293,7 +509,11 @@ class CommunityViewModel(
     }
 
     fun togglePostLike(post: TimelinePostEntity) = viewModelScope.launch { repository.togglePostLike(post) }
-    fun deleteTimelinePost(id: Long) = viewModelScope.launch { repository.deleteTimelinePost(id) }
+    fun togglePinPost(post: TimelinePostEntity) = viewModelScope.launch {
+        repository.togglePinPost(post)
+        _snackbarMessage.value = if (!post.isPinned) "تم تثبيت المنشور في الأعلى" else "تم إلغاء تثبيت المنشور"
+    }
+    fun deleteTimelinePost(post: TimelinePostEntity) = viewModelScope.launch { repository.deleteTimelinePost(post) }
 
     fun banUserOneDay(identifier: String, displayName: String, reason: String) {
         viewModelScope.launch {
@@ -309,7 +529,7 @@ class CommunityViewModel(
         }
     }
 
-    // --- General Chat Room ---
+    // --- General Chat, Analysis, Clips, Art ---
     fun sendGeneralChat(text: String) {
         viewModelScope.launch {
             repository.sendGeneralChatMessage(text)
@@ -319,7 +539,6 @@ class CommunityViewModel(
 
     fun deleteChatMessage(id: String) = viewModelScope.launch { repository.deleteChatMessage(id) }
 
-    // --- Stream Analysis ---
     fun addAnalysis(streamerSlug: String, streamerName: String, title: String, text: String, rating: Int) {
         viewModelScope.launch {
             repository.addAnalysis(streamerSlug, streamerName, title, text, rating)
@@ -330,7 +549,6 @@ class CommunityViewModel(
 
     fun deleteAnalysis(id: Long) = viewModelScope.launch { repository.deleteAnalysis(id) }
 
-    // --- Clips & Art ---
     fun addClip(streamerSlug: String, streamerName: String, title: String, videoUrl: String) {
         viewModelScope.launch {
             repository.addClip(streamerSlug, streamerName, title, videoUrl)
@@ -353,10 +571,10 @@ class CommunityViewModel(
     fun toggleArtLike(art: ArtEntity) = viewModelScope.launch { repository.toggleArtLike(art) }
     fun deleteArt(id: Long) = viewModelScope.launch { repository.deleteArt(id) }
 
-    // --- Profile & Admin ---
-    fun updateProfile(name: String, bio: String, avatarUrl: String) {
+    // --- Profile & Admin Auth ---
+    fun updateProfile(name: String, bio: String, avatarUrl: String, bannerUrl: String) {
         viewModelScope.launch {
-            repository.updateProfile(name, bio, avatarUrl)
+            repository.updateProfile(name, bio, avatarUrl, bannerUrl)
             _snackbarMessage.value = "تم تحديث الملف الشخصي"
         }
     }
@@ -376,28 +594,32 @@ class CommunityViewModel(
         }
     }
 
-    // --- KICK OAuth2 ---
-    fun launchKickOAuth(context: Context) {
+    // --- KICK OAuth2 Auto-Intercept WebView ---
+    fun openKickOAuthWebView() {
         viewModelScope.launch {
-            runCatching { KickOAuthManager.launchOAuthLogin(context, sessionManager) }
-                .onFailure { _snackbarMessage.value = "تعذر فتح متصفح KICK" }
+            runCatching { KickOAuthManager.prepareAuthorizeUrl(sessionManager) }
+                .onSuccess { url -> _oauthWebUrl.value = url }
+                .onFailure { _snackbarMessage.value = "تعذر تجهيز رابط تسجيل دخول KICK" }
         }
     }
 
-    fun handleOAuthRedirect(uri: Uri) {
-        val code = uri.getQueryParameter("code")
-        val state = uri.getQueryParameter("state")
-        val error = uri.getQueryParameter("error")
-        if (!error.isNullOrBlank()) {
-            _snackbarMessage.value = "تم إلغاء الربط: $error"
-            return
-        }
-        if (code.isNullOrBlank()) return
+    fun closeKickOAuthWebView() {
+        _oauthWebUrl.value = null
+    }
+
+    fun handleOAuthCode(code: String, state: String?) {
+        _oauthWebUrl.value = null
         viewModelScope.launch {
+            _isBusy.value = true
             repository.exchangeOAuthCode(code, state)
                 .onSuccess { _snackbarMessage.value = "تم ربط حساب KICK (${it.kickUsername ?: "بنجاح"})" }
                 .onFailure { _snackbarMessage.value = it.message ?: "فشل ربط KICK" }
+            _isBusy.value = false
         }
+    }
+
+    fun showErrorSnackbar(msg: String) {
+        _snackbarMessage.value = msg
     }
 
     fun logoutKick() {

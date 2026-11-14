@@ -7,18 +7,23 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.Source
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import com.respect.community.BuildConfig
 import com.respect.community.data.local.RemoteSettingsState
 import com.respect.community.data.local.entity.CommunityUserEntity
+import com.respect.community.data.local.entity.StreamSnapshotEntity
+import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.TimelinePostEntity
 import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
+import java.util.UUID
 
 enum class OperationType(val value: String) {
     CREATE("create"),
@@ -28,6 +33,21 @@ enum class OperationType(val value: String) {
     GET("get"),
     WRITE("write")
 }
+
+data class TimelinePageResult(
+    val posts: List<TimelinePostEntity>,
+    val lastSnapshot: DocumentSnapshot?,
+    val hasMore: Boolean
+)
+
+data class AdminNotificationPayload(
+    val id: String,
+    val title: String,
+    val body: String,
+    val targetUid: String,
+    val streamerSlug: String,
+    val createdAt: Long
+)
 
 class FirebaseManager(context: Context) {
 
@@ -45,18 +65,21 @@ class FirebaseManager(context: Context) {
         private set
 
     init {
-        if (isConfigured) {
-            runCatching {
-                val app = FirebaseApp.getApps(context).firstOrNull() ?: run {
-                    val options = FirebaseOptions.Builder()
-                        .setApiKey(BuildConfig.FIREBASE_API_KEY)
-                        .setApplicationId(BuildConfig.FIREBASE_APP_ID)
-                        .setProjectId(BuildConfig.FIREBASE_PROJECT_ID)
-                        .setStorageBucket(BuildConfig.FIREBASE_STORAGE_BUCKET.ifBlank { null })
-                        .setGcmSenderId(BuildConfig.FIREBASE_SENDER_ID.ifBlank { null })
-                        .build()
-                    FirebaseApp.initializeApp(context, options)
-                }
+        runCatching {
+            val existingApp = FirebaseApp.getApps(context).firstOrNull()
+            val app = existingApp ?: if (isConfigured) {
+                val options = FirebaseOptions.Builder()
+                    .setApiKey(BuildConfig.FIREBASE_API_KEY)
+                    .setApplicationId(BuildConfig.FIREBASE_APP_ID)
+                    .setProjectId(BuildConfig.FIREBASE_PROJECT_ID)
+                    .setStorageBucket(BuildConfig.FIREBASE_STORAGE_BUCKET.ifBlank { null })
+                    .setGcmSenderId(BuildConfig.FIREBASE_SENDER_ID.ifBlank { null })
+                    .build()
+                FirebaseApp.initializeApp(context, options)
+            } else {
+                null
+            }
+            if (app != null) {
                 firebaseApp = app
                 auth = FirebaseAuth.getInstance(app)
                 firestore = if (BuildConfig.FIREBASE_DATABASE_ID.isNotBlank()) {
@@ -78,9 +101,9 @@ class FirebaseManager(context: Context) {
                         )
                     )
                 }
-            }.onFailure {
-                Log.e(TAG, "Firebase init failed: ${it.message}")
             }
+        }.onFailure {
+            Log.e(TAG, "Firebase init failed: ${it.message}")
         }
     }
 
@@ -106,6 +129,10 @@ class FirebaseManager(context: Context) {
         )
     }
 
+    suspend fun fetchFcmToken(): String? = runCatching {
+        FirebaseMessaging.getInstance().token.await()
+    }.getOrNull()
+
     suspend fun signInWithEmail(email: String, password: String): Result<FirebaseUser> = runCatching {
         val firebaseAuth = auth ?: error("Firebase غير مفعّل")
         val res = firebaseAuth.signInWithEmailAndPassword(email.trim(), password).await()
@@ -126,45 +153,57 @@ class FirebaseManager(context: Context) {
                 .build()
             user.updateProfile(update).await()
         }
+        runCatching { user.sendEmailVerification().await() }
         syncUserProfile(
             CommunityUserEntity(
                 uid = user.uid,
                 displayName = displayName.trim().ifBlank { "عضو RESPECT" },
                 email = user.email.orEmpty(),
                 role = "USER",
+                banned = false,
                 isMuted = false
             )
         )
         user
     }
 
-    suspend fun ensureAnonymousSession(): FirebaseUser? {
-        val firebaseAuth = auth ?: return null
-        firebaseAuth.currentUser?.let { return it }
-        return runCatching { firebaseAuth.signInAnonymously().await().user }.getOrNull()
+    suspend fun sendVerificationEmail(): Result<Unit> = runCatching {
+        val user = auth?.currentUser ?: error("لا يوجد مستخدم مسجل حالياً")
+        user.sendEmailVerification().await()
+    }
+
+    suspend fun reloadCurrentUser(): FirebaseUser? {
+        val user = auth?.currentUser ?: return null
+        runCatching { user.reload().await() }
+        return auth?.currentUser
     }
 
     fun signOut() {
         auth?.signOut()
     }
 
-    suspend fun syncUserProfile(user: CommunityUserEntity) {
+    suspend fun syncUserProfile(user: CommunityUserEntity, fcmToken: String? = null) {
         val db = firestore ?: return
         val path = "users/${user.uid}"
         val now = System.currentTimeMillis()
-        val payload = hashMapOf(
+        val payload = hashMapOf<String, Any>(
             "uid" to user.uid,
             "displayName" to user.displayName.take(80),
             "email" to user.email.take(160),
             "avatarUrl" to user.avatarUrl.take(512),
+            "bannerUrl" to user.bannerUrl.take(512),
             "bio" to user.bio.take(300),
             "role" to user.role,
+            "banned" to user.banned,
             "isMuted" to user.isMuted,
             "mutedUntilMs" to user.mutedUntilMs,
             "banReason" to user.banReason.take(240),
             "createdAt" to now,
             "updatedAt" to now
         )
+        if (!fcmToken.isNullOrBlank()) {
+            payload["fcmToken"] = fcmToken.take(512)
+        }
         try {
             db.collection("users").document(user.uid).set(payload).await()
         } catch (error: Throwable) {
@@ -174,24 +213,60 @@ class FirebaseManager(context: Context) {
 
     suspend fun updateUserModeration(
         uid: String,
-        role: String,
-        isMuted: Boolean,
-        mutedUntilMs: Long,
-        banReason: String
+        role: String? = null,
+        banned: Boolean? = null,
+        isMuted: Boolean? = null,
+        mutedUntilMs: Long? = null,
+        banReason: String? = null
     ) {
         val db = firestore ?: return
         val path = "users/$uid"
-        val updates = mapOf(
-            "role" to role,
-            "isMuted" to isMuted,
-            "mutedUntilMs" to mutedUntilMs,
-            "banReason" to banReason.take(240),
-            "updatedAt" to System.currentTimeMillis()
-        )
+        val updates = mutableMapOf<String, Any>("updatedAt" to System.currentTimeMillis())
+        if (role != null) updates["role"] = role
+        if (banned != null) updates["banned"] = banned
+        if (isMuted != null) updates["isMuted"] = isMuted
+        if (mutedUntilMs != null) updates["mutedUntilMs"] = mutedUntilMs
+        if (banReason != null) updates["banReason"] = banReason.take(240)
         try {
             db.collection("users").document(uid).update(updates).await()
         } catch (error: Throwable) {
             logPermissionOrFirestoreError(error, OperationType.UPDATE, path)
+        }
+    }
+
+    suspend fun deleteUserDocument(uid: String) {
+        val db = firestore ?: return
+        val path = "users/$uid"
+        try {
+            db.collection("users").document(uid).delete().await()
+        } catch (error: Throwable) {
+            logPermissionOrFirestoreError(error, OperationType.DELETE, path)
+        }
+    }
+
+    // --- Paginated Timeline Posts (10 posts per page) ---
+    suspend fun fetchTimelinePage(
+        pageSize: Long = 10L,
+        afterSnapshot: DocumentSnapshot? = null
+    ): Result<TimelinePageResult> = runCatching {
+        val db = firestore ?: return@runCatching TimelinePageResult(emptyList(), null, false)
+        val path = "timeline_posts"
+        try {
+            var query: Query = db.collection(path)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(pageSize)
+            if (afterSnapshot != null) {
+                query = query.startAfter(afterSnapshot)
+            }
+            val snap = query.get().await()
+            val posts = snap.documents.map { doc -> doc.toTimelineEntity() }
+            TimelinePageResult(
+                posts = posts,
+                lastSnapshot = snap.documents.lastOrNull(),
+                hasMore = snap.documents.size >= pageSize
+            )
+        } catch (error: Throwable) {
+            handleFirestoreError(error, OperationType.LIST, path)
         }
     }
 
@@ -206,6 +281,7 @@ class FirebaseManager(context: Context) {
             "authorAvatarUrl" to post.authorAvatarUrl.take(512),
             "isAdminPost" to post.isAdminPost,
             "isOfficialAnnouncement" to post.isOfficialAnnouncement,
+            "isPinned" to post.isPinned,
             "content" to post.content.take(1200),
             "mediaUrl" to post.mediaUrl.take(512),
             "mediaType" to post.mediaType,
@@ -216,6 +292,153 @@ class FirebaseManager(context: Context) {
             db.collection("timeline_posts").document(docId).set(payload).await()
         } catch (error: Throwable) {
             logPermissionOrFirestoreError(error, OperationType.CREATE, path)
+        }
+    }
+
+    suspend fun setPostPinned(remoteId: String, isPinned: Boolean) {
+        val db = firestore ?: return
+        if (remoteId.isBlank()) return
+        val path = "timeline_posts/$remoteId"
+        try {
+            db.collection("timeline_posts").document(remoteId).update("isPinned", isPinned).await()
+        } catch (error: Throwable) {
+            logPermissionOrFirestoreError(error, OperationType.UPDATE, path)
+        }
+    }
+
+    suspend fun deleteTimelinePostRemote(remoteId: String) {
+        val db = firestore ?: return
+        if (remoteId.isBlank()) return
+        val path = "timeline_posts/$remoteId"
+        try {
+            db.collection("timeline_posts").document(remoteId).delete().await()
+        } catch (error: Throwable) {
+            logPermissionOrFirestoreError(error, OperationType.DELETE, path)
+        }
+    }
+
+    // --- Global & Featured Streamers ---
+    suspend fun saveGlobalStreamer(streamer: StreamerEntity, addedByUid: String) {
+        val db = firestore ?: return
+        val path = "streamers/${streamer.slug}"
+        val now = System.currentTimeMillis()
+        val payload = hashMapOf(
+            "slug" to streamer.slug,
+            "displayName" to streamer.displayName.take(80),
+            "characterNames" to streamer.characterNames.take(200),
+            "broadcasterUserId" to streamer.broadcasterUserId,
+            "isGlobal" to true,
+            "isFeatured" to streamer.isFeatured,
+            "addedByUid" to addedByUid,
+            "createdAt" to now,
+            "updatedAt" to now
+        )
+        try {
+            db.collection("streamers").document(streamer.slug).set(payload).await()
+        } catch (error: Throwable) {
+            logPermissionOrFirestoreError(error, OperationType.WRITE, path)
+        }
+    }
+
+    suspend fun setStreamerFeaturedRemote(slug: String, isFeatured: Boolean) {
+        val db = firestore ?: return
+        val path = "streamers/$slug"
+        try {
+            db.collection("streamers").document(slug).update(
+                mapOf("isFeatured" to isFeatured, "updatedAt" to System.currentTimeMillis())
+            ).await()
+        } catch (error: Throwable) {
+            logPermissionOrFirestoreError(error, OperationType.UPDATE, path)
+        }
+    }
+
+    suspend fun deleteGlobalStreamerRemote(slug: String) {
+        val db = firestore ?: return
+        val path = "streamers/$slug"
+        try {
+            db.collection("streamers").document(slug).delete().await()
+        } catch (error: Throwable) {
+            logPermissionOrFirestoreError(error, OperationType.DELETE, path)
+        }
+    }
+
+    // --- 10-Min KICK Analytics Snapshots ---
+    suspend fun saveStreamSnapshots(snapshots: List<StreamSnapshotEntity>) {
+        val db = firestore ?: return
+        if (snapshots.isEmpty()) return
+        for (snap in snapshots) {
+            val docId = "snap_${snap.streamerSlug}_${snap.recordedAtMs}"
+            val path = "stream_analytics/$docId"
+            val payload = hashMapOf(
+                "id" to docId,
+                "streamerSlug" to snap.streamerSlug.take(80),
+                "streamerName" to snap.streamerName.take(80),
+                "isLive" to snap.isLive,
+                "viewerCount" to snap.viewerCount,
+                "followerCount" to snap.followerCount,
+                "streamTitle" to snap.streamTitle.take(300),
+                "recordedAtMs" to snap.recordedAtMs
+            )
+            try {
+                db.collection("stream_analytics").document(docId).set(payload).await()
+            } catch (error: Throwable) {
+                logPermissionOrFirestoreError(error, OperationType.CREATE, path)
+            }
+        }
+    }
+
+    suspend fun fetchRecentSnapshots(sinceMs: Long): List<StreamSnapshotEntity> {
+        val db = firestore ?: return emptyList()
+        val path = "stream_analytics"
+        return try {
+            val snap = db.collection(path)
+                .whereGreaterThanOrEqualTo("recordedAtMs", sinceMs)
+                .orderBy("recordedAtMs", Query.Direction.DESCENDING)
+                .limit(500)
+                .get()
+                .await()
+            snap.documents.mapNotNull { doc ->
+                val slug = doc.getString("streamerSlug") ?: return@mapNotNull null
+                StreamSnapshotEntity(
+                    streamerSlug = slug,
+                    streamerName = doc.getString("streamerName") ?: slug,
+                    isLive = doc.getBoolean("isLive") ?: false,
+                    viewerCount = (doc.getLong("viewerCount") ?: 0L).toInt(),
+                    followerCount = (doc.getLong("followerCount") ?: 0L).toInt(),
+                    streamTitle = doc.getString("streamTitle").orEmpty(),
+                    recordedAtMs = doc.getLong("recordedAtMs") ?: 0L
+                )
+            }
+        } catch (error: Throwable) {
+            logPermissionOrFirestoreError(error, OperationType.LIST, path)
+            emptyList()
+        }
+    }
+
+    // --- Admin Notification Center ---
+    suspend fun dispatchNotification(
+        title: String,
+        body: String,
+        targetUid: String = "",
+        streamerSlug: String = ""
+    ): Result<Unit> = runCatching {
+        val db = firestore ?: error("Firestore غير متاح")
+        val docId = "notif_${UUID.randomUUID().toString().replace("-", "").take(16)}"
+        val path = "notifications/$docId"
+        val sender = auth?.currentUser?.uid ?: "admin"
+        val payload = hashMapOf(
+            "id" to docId,
+            "title" to title.take(140),
+            "body" to body.take(400),
+            "targetUid" to targetUid.trim().take(128),
+            "streamerSlug" to streamerSlug.trim().take(80),
+            "senderUid" to sender,
+            "createdAt" to System.currentTimeMillis()
+        )
+        try {
+            db.collection("notifications").document(docId).set(payload).await()
+        } catch (error: Throwable) {
+            handleFirestoreError(error, OperationType.CREATE, path)
         }
     }
 
@@ -241,21 +464,23 @@ class FirebaseManager(context: Context) {
         val path = "users"
         return db.collection(path)
             .orderBy("updatedAt", Query.Direction.DESCENDING)
-            .limit(100)
+            .limit(150)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     logPermissionOrFirestoreError(error, OperationType.LIST, path)
                     return@addSnapshotListener
                 }
-                val list = snapshot?.documents.orEmpty().mapNotNull { doc ->
+                val list = snapshot?.documents.orEmpty().map { doc ->
                     val uid = doc.getString("uid") ?: doc.id
                     CommunityUserEntity(
                         uid = uid,
                         displayName = doc.getString("displayName") ?: "عضو RESPECT",
                         email = doc.getString("email").orEmpty(),
                         avatarUrl = doc.getString("avatarUrl").orEmpty(),
+                        bannerUrl = doc.getString("bannerUrl").orEmpty(),
                         bio = doc.getString("bio").orEmpty(),
                         role = doc.getString("role") ?: "USER",
+                        banned = doc.getBoolean("banned") ?: false,
                         isMuted = doc.getBoolean("isMuted") ?: false,
                         mutedUntilMs = doc.getLong("mutedUntilMs") ?: 0L,
                         banReason = doc.getString("banReason").orEmpty(),
@@ -287,6 +512,25 @@ class FirebaseManager(context: Context) {
                     )
                 }
             }
+    }
+
+    private fun DocumentSnapshot.toTimelineEntity(): TimelinePostEntity {
+        val remote = getString("id") ?: id
+        return TimelinePostEntity(
+            remoteId = remote,
+            authorUid = getString("authorUid").orEmpty(),
+            authorName = getString("authorName") ?: "عضو RESPECT",
+            authorIdentifier = getString("authorUid") ?: "member",
+            authorAvatarUrl = getString("authorAvatarUrl").orEmpty(),
+            isAdminPost = getBoolean("isAdminPost") ?: false,
+            isOfficialAnnouncement = getBoolean("isOfficialAnnouncement") ?: false,
+            isPinned = getBoolean("isPinned") ?: false,
+            content = getString("content").orEmpty(),
+            mediaUrl = getString("mediaUrl").orEmpty(),
+            mediaType = getString("mediaType") ?: "NONE",
+            likesCount = (getLong("likesCount") ?: 0L).toInt(),
+            createdAt = getLong("createdAt") ?: System.currentTimeMillis()
+        )
     }
 
     fun handleFirestoreError(

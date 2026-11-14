@@ -2,39 +2,55 @@ package com.respect.community.data.remote
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
+import id.zelory.compressor.Compressor
+import id.zelory.compressor.constraint.format
+import id.zelory.compressor.constraint.quality
+import id.zelory.compressor.constraint.resolution
+import id.zelory.compressor.constraint.size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import org.json.JSONArray
-import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 
 class TelegraphUploader(private val okHttpClient: OkHttpClient) {
 
     suspend fun uploadImage(context: Context, imageUri: Uri): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val bytes = readAndCompressImage(context, imageUri)
-                ?: error("تعذر قراءة الصورة المختارة")
+        var sourceTemp: File? = null
+        var compressedFile: File? = null
+        try {
+            sourceTemp = copyUriToTempFile(context, imageUri)
+                ?: return@withContext Result.failure(IllegalStateException("تعذر قراءة الصورة المختارة"))
+
+            compressedFile = runCatching {
+                Compressor.compress(context, sourceTemp) {
+                    resolution(1600, 1600)
+                    quality(85)
+                    format(Bitmap.CompressFormat.JPEG)
+                    size(4_500_000L) // Safe < 5MB Telegraph limit
+                }
+            }.getOrDefault(sourceTemp)
 
             val endpoints = listOf(
-                "https://telegra.ph" to "https://telegra.ph/upload",
-                "https://graph.org" to "https://graph.org/upload"
+                "https://api.telegra.ph" to "https://api.telegra.ph/upload",
+                "https://telegra.ph" to "https://telegra.ph/upload"
             )
 
             var lastError: Throwable? = null
             for ((baseUrl, uploadUrl) in endpoints) {
-                val result = runCatching {
+                val attempt = runCatching {
                     val body = MultipartBody.Builder()
                         .setType(MultipartBody.FORM)
                         .addFormDataPart(
                             "file",
                             "respect_upload.jpg",
-                            bytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
+                            compressedFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
                         )
                         .build()
 
@@ -53,38 +69,33 @@ class TelegraphUploader(private val okHttpClient: OkHttpClient) {
                         if (src.isBlank()) {
                             error("استجابة غير صالحة من Telegraph")
                         }
-                        if (src.startsWith("http")) src else "$baseUrl$src"
+                        if (src.startsWith("http")) src else "${baseUrl.replace("api.", "")}$src"
                     }
                 }
-                if (result.isSuccess) {
-                    return@runCatching result.getOrThrow()
+                if (attempt.isSuccess) {
+                    return@withContext attempt
                 }
-                lastError = result.exceptionOrNull()
+                lastError = attempt.exceptionOrNull()
             }
-
-            throw lastError ?: IllegalStateException("تعذر رفع الصورة إلى Telegraph")
+            Result.failure(lastError ?: IllegalStateException("تعذر رفع الصورة إلى Telegraph"))
+        } catch (t: Throwable) {
+            Result.failure(t)
+        } finally {
+            runCatching { sourceTemp?.delete() }
+            if (compressedFile != sourceTemp) {
+                runCatching { compressedFile?.delete() }
+            }
         }
     }
 
-    private fun readAndCompressImage(context: Context, uri: Uri): ByteArray? {
-        val rawBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-        val decoded = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size) ?: return rawBytes
-
-        val maxDim = 1600
-        val scaled = if (decoded.width > maxDim || decoded.height > maxDim) {
-            val ratio = maxDim.toFloat() / maxOf(decoded.width, decoded.height).toFloat()
-            val w = (decoded.width * ratio).toInt().coerceAtLeast(1)
-            val h = (decoded.height * ratio).toInt().coerceAtLeast(1)
-            Bitmap.createScaledBitmap(decoded, w, h, true).also {
-                if (it != decoded) decoded.recycle()
+    private fun copyUriToTempFile(context: Context, uri: Uri): File? {
+        val input = context.contentResolver.openInputStream(uri) ?: return null
+        val temp = File.createTempFile("respect_src_", ".jpg", context.cacheDir)
+        input.use { ins ->
+            FileOutputStream(temp).use { out ->
+                ins.copyTo(out)
             }
-        } else {
-            decoded
         }
-
-        val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
-        scaled.recycle()
-        return out.toByteArray()
+        return temp
     }
 }

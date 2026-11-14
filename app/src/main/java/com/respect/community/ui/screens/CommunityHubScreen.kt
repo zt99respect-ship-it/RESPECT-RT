@@ -14,14 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,11 +36,6 @@ import com.respect.community.data.local.entity.ClipEntity
 import com.respect.community.data.local.entity.TimelinePostEntity
 import com.respect.community.ui.components.GlassFilterChip
 import com.respect.community.ui.components.ScaleBounceButton
-import com.respect.community.ui.theme.GlassBorder
-import com.respect.community.ui.theme.RespectPurpleBright
-import com.respect.community.ui.theme.TextMuted
-import com.respect.community.ui.theme.TextPrimary
-import com.respect.community.ui.theme.TextSecondary
 
 @Composable
 fun CommunityHubScreen(
@@ -54,10 +45,15 @@ fun CommunityHubScreen(
     clips: List<ClipEntity>,
     artworks: List<ArtEntity>,
     isAdmin: Boolean,
+    isInitialLoading: Boolean,
+    hasMorePosts: Boolean,
+    isLoadingMorePosts: Boolean,
+    onLoadMorePosts: () -> Unit,
     onUploadImage: suspend (Context, Uri) -> Result<String>,
     onCreatePost: (String, String, String, Boolean) -> Unit,
     onTogglePostLike: (TimelinePostEntity) -> Unit,
-    onDeletePost: (Long) -> Unit,
+    onTogglePinPost: (TimelinePostEntity) -> Unit,
+    onDeletePost: (TimelinePostEntity) -> Unit,
     onBanUserOneDay: (String, String, String) -> Unit,
     onSendGeneralChat: (String) -> Unit,
     onDeleteChatMessage: (String) -> Unit,
@@ -72,29 +68,11 @@ fun CommunityHubScreen(
 ) {
     // 0: Timeline, 1: Chat, 2: Analysis, 3: Clips, 4: Art
     var activeSection by remember { mutableIntStateOf(0) }
-    var searchQuery by remember { mutableStateOf("") }
 
     var showComposePost by remember { mutableStateOf(false) }
     var showAddAnalysis by remember { mutableStateOf(false) }
     var showAddClip by remember { mutableStateOf(false) }
     var showAddArt by remember { mutableStateOf(false) }
-
-    val q = searchQuery.trim()
-    val filteredPosts = remember(timelinePosts, q) {
-        if (q.isBlank()) timelinePosts else timelinePosts.filter {
-            it.content.contains(q, ignoreCase = true) || it.authorName.contains(q, ignoreCase = true)
-        }
-    }
-    val filteredClips = remember(clips, q) {
-        if (q.isBlank()) clips else clips.filter {
-            it.title.contains(q, ignoreCase = true) || it.streamerName.contains(q, ignoreCase = true)
-        }
-    }
-    val filteredArt = remember(artworks, q) {
-        if (q.isBlank()) artworks else artworks.filter {
-            it.title.contains(q, ignoreCase = true) || it.artistName.contains(q, ignoreCase = true)
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -133,26 +111,7 @@ fun CommunityHubScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            if (activeSection != 1) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("ابحث في التايملاين والكليبات والفن...", color = TextMuted) },
-                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = TextSecondary) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(13.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = RespectPurpleBright,
-                        unfocusedBorderColor = GlassBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -168,9 +127,14 @@ fun CommunityHubScreen(
 
         when (activeSection) {
             0 -> TimelineFeedContent(
-                posts = filteredPosts,
+                posts = timelinePosts,
                 isAdmin = isAdmin,
+                isInitialLoading = isInitialLoading,
+                hasMorePosts = hasMorePosts,
+                isLoadingMorePosts = isLoadingMorePosts,
+                onLoadMorePosts = onLoadMorePosts,
                 onTogglePostLike = onTogglePostLike,
+                onTogglePinPost = onTogglePinPost,
                 onDeletePost = onDeletePost,
                 onBanUserOneDay = onBanUserOneDay
             )
@@ -186,14 +150,14 @@ fun CommunityHubScreen(
                 onDeleteAnalysis = onDeleteAnalysis
             )
             3 -> ClipsVerticalFeed(
-                clips = filteredClips,
+                clips = clips,
                 isAdmin = isAdmin,
                 onToggleLike = onToggleClipLike,
                 onDelete = onDeleteClip,
                 modifier = Modifier.fillMaxSize()
             )
             else -> ArtPinterestGrid(
-                artworks = filteredArt,
+                artworks = artworks,
                 isAdmin = isAdmin,
                 onToggleLike = onToggleArtLike,
                 onDelete = onDeleteArt,

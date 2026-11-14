@@ -2,10 +2,6 @@ package com.respect.community.ui.screens
 
 import android.content.Context
 import android.net.Uri
-import android.view.View
-import android.view.ViewGroup
-import android.widget.FrameLayout
-import androidx.annotation.OptIn
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,8 +24,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.VolumeOff
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -42,8 +36,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,33 +45,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
 import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.ClipEntity
 import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.RespectImage
 import com.respect.community.ui.components.ScaleBounceButton
 import com.respect.community.ui.components.TelegraphImagePickerButton
+import com.respect.community.ui.components.VideoLinkPlayer
 import com.respect.community.ui.theme.RespectPurpleBright
 import com.respect.community.ui.theme.RespectSurface
 import com.respect.community.ui.theme.TextMuted
 import com.respect.community.ui.theme.TextPrimary
 import com.respect.community.ui.theme.TextSecondary
 
-@OptIn(ExperimentalFoundationApi::class, UnstableApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ClipsVerticalFeed(
     clips: List<ClipEntity>,
@@ -95,46 +77,7 @@ fun ClipsVerticalFeed(
         return
     }
 
-    val context = LocalContext.current
     val pagerState = rememberPagerState(pageCount = { clips.size })
-    var isMuted by remember { mutableStateOf(false) }
-
-    val exoPlayer = remember {
-        val trackSelector = DefaultTrackSelector(context).apply {
-            setParameters(
-                buildUponParameters()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                    .setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_FORCED)
-                    .build()
-            )
-        }
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(10_000, 30_000, 1_000, 2_500)
-            .setPrioritizeTimeOverSizeThresholds(true)
-            .build()
-
-        ExoPlayer.Builder(context)
-            .setTrackSelector(trackSelector)
-            .setLoadControl(loadControl)
-            .build().apply {
-                repeatMode = Player.REPEAT_MODE_ONE
-            }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
-    }
-
-    LaunchedEffect(pagerState.currentPage, clips) {
-        val clip = clips.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
-        exoPlayer.setMediaItem(MediaItem.fromUri(clip.videoUrl))
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
-    }
-
-    LaunchedEffect(isMuted) {
-        exoPlayer.volume = if (isMuted) 0f else 1f
-    }
 
     VerticalPager(
         state = pagerState,
@@ -149,19 +92,9 @@ fun ClipsVerticalFeed(
                 .background(Color.Black)
         ) {
             if (page == pagerState.currentPage) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = exoPlayer
-                            useController = false
-                            subtitleView?.visibility = View.GONE
-                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            layoutParams = FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        }
-                    },
+                VideoLinkPlayer(
+                    videoUrl = clip.videoUrl,
+                    autoPlay = true,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -189,16 +122,6 @@ fun ClipsVerticalFeed(
                     }
                 }
                 Text("${clip.likesCount}", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-
-                Surface(shape = CircleShape, color = Color(0x88090B10)) {
-                    IconButton(onClick = { isMuted = !isMuted }) {
-                        Icon(
-                            imageVector = if (isMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-                            contentDescription = "الصوت",
-                            tint = TextPrimary
-                        )
-                    }
-                }
 
                 if (isAdmin) {
                     Surface(shape = CircleShape, color = Color(0x88090B10)) {
@@ -309,7 +232,12 @@ fun AddClipDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = streamerName, onValueChange = { streamerName = it }, label = { Text("اسم الستريمر") }, singleLine = true)
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان اللحظة") }, singleLine = true)
-                OutlinedTextField(value = videoUrl, onValueChange = { videoUrl = it }, label = { Text("رابط الفيديو (MP4 / HLS)") }, singleLine = true)
+                OutlinedTextField(
+                    value = videoUrl,
+                    onValueChange = { videoUrl = it },
+                    label = { Text("رابط الفيديو (TikTok / X / MP4 / HLS)") },
+                    singleLine = true
+                )
             }
         },
         confirmButton = {
@@ -342,7 +270,7 @@ fun AddArtDialog(
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان العمل الفني") }, singleLine = true)
                 OutlinedTextField(value = artist, onValueChange = { artist = it }, label = { Text("اسم الرسام") }, singleLine = true)
                 TelegraphImagePickerButton(
-                    label = "رفع الرسمة عبر Telegraph",
+                    label = "ضغط ورفع عبر Telegraph",
                     onUploadImage = onUploadImage,
                     onUploadedUrl = { imageUrl = it }
                 )

@@ -14,30 +14,46 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -50,13 +66,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -67,23 +83,31 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.respect.community.auth.KickOAuthManager
+import com.respect.community.auth.KickOAuthWebViewDialog
 import com.respect.community.service.StreamMonitorService
 import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.LocalRespectHazeState
+import com.respect.community.ui.components.RespectBrandLogo
 import com.respect.community.ui.components.RespectHazeContainer
 import com.respect.community.ui.components.respectGlassStyle
+import com.respect.community.ui.screens.AuthGateScreen
 import com.respect.community.ui.screens.CommunityHubScreen
 import com.respect.community.ui.screens.PlayerScreen
 import com.respect.community.ui.screens.ProfileAdminScreen
+import com.respect.community.ui.screens.StatsScreen
 import com.respect.community.ui.screens.StreamsScreen
-import com.respect.community.ui.theme.GlassHighlightBorder
+import com.respect.community.ui.theme.GlassBorder
 import com.respect.community.ui.theme.GoldAccent
 import com.respect.community.ui.theme.RespectCommunityTheme
 import com.respect.community.ui.theme.RespectPurple
 import com.respect.community.ui.theme.RespectPurpleBright
+import com.respect.community.ui.theme.RespectSurface
 import com.respect.community.ui.theme.TextMuted
 import com.respect.community.ui.theme.TextPrimary
+import com.respect.community.ui.theme.TextSecondary
 import com.respect.community.ui.theme.VoidBlack
+import com.respect.community.ui.viewmodel.CommunitySearchResults
 import com.respect.community.ui.viewmodel.CommunityViewModel
 import com.respect.community.ui.viewmodel.PlayerViewModel
 import dev.chrisbanes.haze.HazeState
@@ -136,7 +160,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         val data = intent?.data
-        if (data != null && data.scheme == "respect" && data.host == "oauth") {
+        if (data != null && data.toString().startsWith(KickOAuthManager.REDIRECT_URI)) {
             pendingOAuthUri = data
         }
         val slug = intent?.getStringExtra(StreamMonitorService.EXTRA_OPEN_SLUG)
@@ -161,6 +185,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RespectCommunityRoot(
     app: RespectCommunityApp,
@@ -191,12 +216,21 @@ private fun RespectCommunityRoot(
     val kickSession by vm.kickAuthSession.collectAsStateWithLifecycle()
     val notifPrefs by vm.notificationPrefs.collectAsStateWithLifecycle()
     val remoteSettings by vm.remoteSettings.collectAsStateWithLifecycle()
+    val statsRankings by vm.statsRankings.collectAsStateWithLifecycle()
+    val selectedStatsPeriod by vm.selectedStatsPeriod.collectAsStateWithLifecycle()
+    val hasMoreTimeline by vm.hasMoreTimeline.collectAsStateWithLifecycle()
+    val isLoadingMorePosts by vm.isLoadingMorePosts.collectAsStateWithLifecycle()
+    val isInitialLoading by vm.isInitialLoading.collectAsStateWithLifecycle()
+    val networkError by vm.networkError.collectAsStateWithLifecycle()
+    val oauthWebUrl by vm.oauthWebUrl.collectAsStateWithLifecycle()
+    val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
+    val searchResults by vm.searchResults.collectAsStateWithLifecycle()
     val isBusy by vm.isBusy.collectAsStateWithLifecycle()
     val snackbarMsg by vm.snackbarMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val hazeState = remember { HazeState() }
-    val activityContext = LocalContext.current
+    var showSearchOverlay by remember { mutableStateOf(false) }
 
     var showSplash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -206,7 +240,11 @@ private fun RespectCommunityRoot(
 
     LaunchedEffect(pendingOAuthUri) {
         if (pendingOAuthUri != null) {
-            vm.handleOAuthRedirect(pendingOAuthUri)
+            val code = pendingOAuthUri.getQueryParameter("code")
+            val state = pendingOAuthUri.getQueryParameter("state")
+            if (!code.isNullOrBlank()) {
+                vm.handleOAuthCode(code, state)
+            }
             onConsumedOAuthUri()
         }
     }
@@ -231,7 +269,9 @@ private fun RespectCommunityRoot(
         CommunityTab.Community,
         CommunityTab.Profile
     )
-    val showBottomNav = currentRoute != null && !currentRoute.startsWith("player/")
+    val isAuthorized = (userProfile.isFirebaseSignedIn && userProfile.isEmailVerified) || userProfile.isAdmin
+    val isImmersiveRoute = currentRoute != null && (currentRoute.startsWith("player/") || currentRoute == "stats")
+    val showChrome = isAuthorized && !isImmersiveRoute
 
     CompositionLocalProvider(LocalRespectHazeState provides hazeState) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -239,8 +279,40 @@ private fun RespectCommunityRoot(
                 Scaffold(
                     containerColor = Color.Transparent,
                     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                    topBar = {
+                        if (showChrome) {
+                            TopAppBar(
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = Color.Transparent,
+                                    titleContentColor = TextPrimary
+                                ),
+                                title = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        RespectBrandLogo(size = 34.dp, cornerRadius = 10.dp)
+                                        Text(
+                                            text = "RESPECT",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 19.sp
+                                        )
+                                    }
+                                },
+                                actions = {
+                                    IconButton(onClick = { showSearchOverlay = true }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Search,
+                                            contentDescription = "بحث",
+                                            tint = TextPrimary
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    },
                     bottomBar = {
-                        if (showBottomNav) {
+                        if (showChrome) {
                             val navShape = RoundedCornerShape(24.dp)
                             Box(
                                 modifier = Modifier
@@ -248,7 +320,7 @@ private fun RespectCommunityRoot(
                                     .padding(horizontal = 16.dp, vertical = 10.dp)
                                     .clip(navShape)
                                     .hazeChild(state = hazeState, style = respectGlassStyle(false))
-                                    .border(BorderStroke(1.dp, GlassHighlightBorder.copy(alpha = 0.2f)), navShape)
+                                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)), navShape)
                             ) {
                                 NavigationBar(
                                     containerColor = Color.Transparent,
@@ -268,9 +340,9 @@ private fun RespectCommunityRoot(
                                             icon = { Icon(tab.icon, contentDescription = tab.label) },
                                             label = { Text(tab.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                                             colors = NavigationBarItemDefaults.colors(
-                                                selectedIconColor = TextPrimary,
+                                                selectedIconColor = RespectPurpleBright,
                                                 selectedTextColor = TextPrimary,
-                                                indicatorColor = RespectPurple.copy(alpha = 0.25f),
+                                                indicatorColor = RespectPurple.copy(alpha = 0.22f),
                                                 unselectedIconColor = TextMuted,
                                                 unselectedTextColor = TextMuted
                                             )
@@ -286,7 +358,17 @@ private fun RespectCommunityRoot(
                             .fillMaxSize()
                             .padding(top = innerPadding.calculateTopPadding())
                     ) {
-                        if (remoteSettings.maintenanceMode && !userProfile.isAdmin && currentRoute != CommunityTab.Profile.route) {
+                        if (!isAuthorized) {
+                            AuthGateScreen(
+                                profile = userProfile,
+                                isBusy = isBusy,
+                                onSignIn = vm::signInFirebase,
+                                onSignUp = vm::signUpFirebase,
+                                onResendVerification = vm::resendVerificationEmail,
+                                onCheckVerification = vm::checkEmailVerification,
+                                onSignOut = vm::signOutFirebase
+                            )
+                        } else if (remoteSettings.maintenanceMode && !userProfile.isAdmin && currentRoute != CommunityTab.Profile.route) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -314,9 +396,13 @@ private fun RespectCommunityRoot(
                                         bannerText = remoteSettings.bannerText,
                                         isAdmin = userProfile.isAdmin,
                                         isBusy = isBusy,
+                                        isInitialLoading = isInitialLoading,
+                                        networkError = networkError,
                                         onAddStreamer = vm::addStreamer,
                                         onRefreshAll = { vm.refreshAllStreamers(silent = false) },
-                                        onToggleFavorite = vm::toggleFavorite,
+                                        onRetry = vm::initialBootSync,
+                                        onOpenStats = { navController.navigate("stats") },
+                                        onToggleNotifying = vm::toggleNotifying,
                                         onToggleFollow = vm::toggleFollow,
                                         onRemoveStreamer = vm::removeStreamer,
                                         onWatchStreamer = { slug -> navController.navigate("player/$slug") },
@@ -334,9 +420,14 @@ private fun RespectCommunityRoot(
                                         clips = clips,
                                         artworks = artworks,
                                         isAdmin = userProfile.isAdmin,
+                                        isInitialLoading = isInitialLoading,
+                                        hasMorePosts = hasMoreTimeline,
+                                        isLoadingMorePosts = isLoadingMorePosts,
+                                        onLoadMorePosts = vm::loadNextTimelinePage,
                                         onUploadImage = vm::uploadImageToTelegraph,
                                         onCreatePost = vm::createTimelinePost,
                                         onTogglePostLike = vm::togglePostLike,
+                                        onTogglePinPost = vm::togglePinPost,
                                         onDeletePost = vm::deleteTimelinePost,
                                         onBanUserOneDay = vm::banUserOneDay,
                                         onSendGeneralChat = vm::sendGeneralChat,
@@ -370,8 +461,10 @@ private fun RespectCommunityRoot(
                                         onUpdateProfile = vm::updateProfile,
                                         onFirebaseSignIn = vm::signInFirebase,
                                         onFirebaseSignUp = vm::signUpFirebase,
+                                        onResendVerification = vm::resendVerificationEmail,
+                                        onCheckVerification = vm::checkEmailVerification,
                                         onFirebaseSignOut = vm::signOutFirebase,
-                                        onKickOAuthLogin = { vm.launchKickOAuth(activityContext) },
+                                        onKickOAuthLogin = vm::openKickOAuthWebView,
                                         onKickLogout = vm::logoutKick,
                                         onMonitoringChanged = { enabled -> vm.setMonitoring(app, enabled) },
                                         onSoundChanged = vm::setSound,
@@ -380,21 +473,39 @@ private fun RespectCommunityRoot(
                                         onAdminLogin = vm::loginAdmin,
                                         onAdminLogout = vm::logoutAdmin,
                                         onUpdateUserRole = vm::updateUserRole,
-                                        onMuteCommunityUser = vm::muteCommunityUser,
-                                        onAddStreamer = vm::addStreamer,
+                                        onSetUserBannedOrMuted = vm::setUserBannedOrMuted,
+                                        onDeleteCommunityUser = vm::deleteCommunityUser,
+                                        onAddGlobalStreamer = { slug, chars -> vm.addStreamer(slug, chars, isGlobal = true) },
+                                        onToggleFeaturedStreamer = vm::toggleFeatured,
                                         onRemoveStreamer = vm::removeStreamer,
                                         onApproveSuggestion = vm::approveSuggestion,
                                         onRejectSuggestion = vm::rejectSuggestion,
                                         onDeleteSuggestion = vm::deleteSuggestion,
                                         onSaveSchedule = vm::saveScheduleEvent,
                                         onDeleteSchedule = vm::deleteScheduleEvent,
+                                        onTogglePinPost = vm::togglePinPost,
                                         onDeletePost = vm::deleteTimelinePost,
                                         onBanUserOneDay = vm::banUserOneDay,
                                         onUnbanUser = vm::unbanUser,
                                         onDeleteClip = vm::deleteClip,
                                         onDeleteArt = vm::deleteArt,
                                         onSaveGlobalSettings = vm::saveGlobalSettings,
-                                        onRefreshRemoteConfig = vm::refreshRemoteConfig
+                                        onRefreshRemoteConfig = vm::refreshRemoteConfig,
+                                        onSendBroadcast = vm::sendBroadcastNotification,
+                                        onSendTargetedNotification = vm::sendTargetedNotification,
+                                        onSendTestKickNotification = vm::sendTestKickNotification
+                                    )
+                                }
+
+                                composable("stats") {
+                                    StatsScreen(
+                                        rankings = statsRankings,
+                                        selectedPeriod = selectedStatsPeriod,
+                                        isBusy = isBusy,
+                                        onSelectPeriod = vm::setStatsPeriod,
+                                        onRefreshStats = vm::refreshStatsFromKICK,
+                                        onWatchStreamer = { slug -> navController.navigate("player/$slug") },
+                                        onBack = { navController.popBackStack() }
                                     )
                                 }
 
@@ -410,13 +521,38 @@ private fun RespectCommunityRoot(
                                     PlayerScreen(
                                         viewModel = playerVm,
                                         onBack = { navController.popBackStack() },
-                                        onRequestKickLogin = { vm.launchKickOAuth(activityContext) }
+                                        onRequestKickLogin = vm::openKickOAuthWebView
                                     )
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            if (oauthWebUrl != null) {
+                KickOAuthWebViewDialog(
+                    authorizeUrl = oauthWebUrl.orEmpty(),
+                    onCodeIntercepted = vm::handleOAuthCode,
+                    onError = { err ->
+                        vm.closeKickOAuthWebView()
+                        vm.showErrorSnackbar(err)
+                    },
+                    onDismiss = vm::closeKickOAuthWebView
+                )
+            }
+
+            if (showSearchOverlay) {
+                UnifiedSearchDialog(
+                    query = searchQuery,
+                    results = searchResults,
+                    onQueryChange = vm::updateSearchQuery,
+                    onOpenStreamer = { slug ->
+                        showSearchOverlay = false
+                        navController.navigate("player/$slug")
+                    },
+                    onDismiss = { showSearchOverlay = false }
+                )
             }
 
             AnimatedVisibility(
@@ -431,16 +567,120 @@ private fun RespectCommunityRoot(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Image(
-                            painter = painterResource(id = R.drawable.respect_logo),
-                            contentDescription = "RESPECT",
-                            modifier = Modifier
-                                .size(104.dp)
-                                .clip(RoundedCornerShape(24.dp))
-                        )
+                        RespectBrandLogo(size = 104.dp, cornerRadius = 24.dp)
                         Spacer(modifier = Modifier.height(14.dp))
-                        Text("RESPECT COMMUNITY", color = TextPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 21.sp)
+                        Text("RESPECT COMMUNITY", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 21.sp)
                         Text("مجتمع ريسبكت الرسمي", color = RespectPurpleBright, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnifiedSearchDialog(
+    query: String,
+    results: CommunitySearchResults,
+    onQueryChange: (String) -> Unit,
+    onOpenStreamer: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(VoidBlack.copy(alpha = 0.96f))
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    placeholder = { Text("ابحث في البثوث والمنشورات والكليبات والفن...", color = TextMuted) },
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = RespectPurpleBright) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = RespectPurpleBright,
+                        unfocusedBorderColor = GlassBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Rounded.Close, contentDescription = "إغلاق", tint = TextPrimary)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                if (results.streamers.isNotEmpty()) {
+                    item { Text("الستريمرز", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
+                    items(results.streamers, key = { "sr_s_${it.slug}" }) { s ->
+                        HazeGlassCard(modifier = Modifier.clickable { onOpenStreamer(s.slug) }) {
+                            Text("${s.displayName} (@${s.slug})", color = TextPrimary, fontWeight = FontWeight.Bold)
+                            if (s.characterNames.isNotBlank()) {
+                                Text("الشخصيات: ${s.characterNames}", color = TextSecondary, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+                if (results.posts.isNotEmpty()) {
+                    item { Text("المنشورات", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
+                    items(results.posts, key = { "sr_p_${it.id}" }) { p ->
+                        HazeGlassCard {
+                            Text(p.authorName, color = RespectPurpleBright, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(p.content, color = TextPrimary, maxLines = 2)
+                        }
+                    }
+                }
+                if (results.clips.isNotEmpty()) {
+                    item { Text("الكليبات", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
+                    items(results.clips, key = { "sr_c_${it.id}" }) { c ->
+                        HazeGlassCard {
+                            Text(c.title, color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Text("@${c.streamerName}", color = TextMuted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (results.arts.isNotEmpty()) {
+                    item { Text("معرض الفن", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
+                    items(results.arts, key = { "sr_a_${it.id}" }) { a ->
+                        HazeGlassCard {
+                            Text(a.title, color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Text("الفنان: ${a.artistName}", color = TextMuted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (query.isNotBlank() && results.streamers.isEmpty() && results.posts.isEmpty() &&
+                    results.clips.isEmpty() && results.arts.isEmpty()
+                ) {
+                    item {
+                        Surface(
+                            color = RespectSurface,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "لا توجد نتائج مطابقة لـ \"$query\"",
+                                color = TextMuted,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
                     }
                 }
             }

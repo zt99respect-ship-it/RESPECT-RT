@@ -20,11 +20,14 @@ private val Context.communityDataStore: DataStore<Preferences> by preferencesDat
 data class UserProfileState(
     val uid: String = "",
     val displayName: String = "عضو RESPECT",
-    val email: String = "member@respect.gg",
+    val email: String = "",
     val bio: String = "متابع ومشجع لمجتمع ريسبكت على KICK",
     val avatarUrl: String = "",
+    val bannerUrl: String = "",
+    val role: String = "USER",
     val isAdmin: Boolean = false,
-    val isFirebaseSignedIn: Boolean = false
+    val isFirebaseSignedIn: Boolean = false,
+    val isEmailVerified: Boolean = false
 ) {
     val activeIdentifier: String
         get() = uid.ifBlank { email.ifBlank { displayName } }
@@ -64,8 +67,11 @@ class SessionManager(private val context: Context) {
         val PROFILE_EMAIL = stringPreferencesKey("profile_email")
         val PROFILE_BIO = stringPreferencesKey("profile_bio")
         val PROFILE_AVATAR = stringPreferencesKey("profile_avatar")
+        val PROFILE_BANNER = stringPreferencesKey("profile_banner")
+        val PROFILE_ROLE = stringPreferencesKey("profile_role")
         val IS_ADMIN = booleanPreferencesKey("is_admin")
         val IS_FIREBASE_SIGNED_IN = booleanPreferencesKey("is_firebase_signed_in")
+        val IS_EMAIL_VERIFIED = booleanPreferencesKey("is_email_verified")
 
         val KICK_ACCESS_TOKEN = stringPreferencesKey("kick_access_token")
         val KICK_REFRESH_TOKEN = stringPreferencesKey("kick_refresh_token")
@@ -95,11 +101,14 @@ class SessionManager(private val context: Context) {
         UserProfileState(
             uid = prefs[Keys.PROFILE_UID].orEmpty(),
             displayName = prefs[Keys.PROFILE_NAME] ?: "عضو RESPECT",
-            email = prefs[Keys.PROFILE_EMAIL] ?: "member@respect.gg",
+            email = prefs[Keys.PROFILE_EMAIL].orEmpty(),
             bio = prefs[Keys.PROFILE_BIO] ?: "متابع ومشجع لمجتمع ريسبكت على KICK",
             avatarUrl = prefs[Keys.PROFILE_AVATAR].orEmpty(),
+            bannerUrl = prefs[Keys.PROFILE_BANNER].orEmpty(),
+            role = prefs[Keys.PROFILE_ROLE] ?: "USER",
             isAdmin = prefs[Keys.IS_ADMIN] ?: false,
-            isFirebaseSignedIn = prefs[Keys.IS_FIREBASE_SIGNED_IN] ?: false
+            isFirebaseSignedIn = prefs[Keys.IS_FIREBASE_SIGNED_IN] ?: false,
+            isEmailVerified = prefs[Keys.IS_EMAIL_VERIFIED] ?: false
         )
     }
 
@@ -137,11 +146,12 @@ class SessionManager(private val context: Context) {
     suspend fun getNotificationPrefsOnce(): NotificationPrefs = notificationPrefsFlow.first()
     suspend fun getRemoteSettingsOnce(): RemoteSettingsState = remoteSettingsFlow.first()
 
-    suspend fun updateProfile(name: String, bio: String, avatarUrl: String) {
+    suspend fun updateProfile(name: String, bio: String, avatarUrl: String, bannerUrl: String = "") {
         context.communityDataStore.edit { prefs ->
             prefs[Keys.PROFILE_NAME] = name.trim().ifBlank { "عضو RESPECT" }
             prefs[Keys.PROFILE_BIO] = bio.trim()
             prefs[Keys.PROFILE_AVATAR] = avatarUrl.trim()
+            prefs[Keys.PROFILE_BANNER] = bannerUrl.trim()
         }
     }
 
@@ -149,21 +159,28 @@ class SessionManager(private val context: Context) {
         uid: String,
         email: String,
         displayName: String?,
-        isAdmin: Boolean
+        isAdmin: Boolean,
+        isEmailVerified: Boolean,
+        role: String = if (isAdmin) "ADMIN" else "USER"
     ) {
         context.communityDataStore.edit { prefs ->
             prefs[Keys.PROFILE_UID] = uid
             if (email.isNotBlank()) prefs[Keys.PROFILE_EMAIL] = email
             if (!displayName.isNullOrBlank()) prefs[Keys.PROFILE_NAME] = displayName
+            prefs[Keys.PROFILE_ROLE] = role
             prefs[Keys.IS_ADMIN] = isAdmin
             prefs[Keys.IS_FIREBASE_SIGNED_IN] = uid.isNotBlank()
+            prefs[Keys.IS_EMAIL_VERIFIED] = isEmailVerified
         }
     }
 
     suspend fun clearFirebaseSession() {
         context.communityDataStore.edit { prefs ->
             prefs.remove(Keys.PROFILE_UID)
+            prefs.remove(Keys.PROFILE_EMAIL)
+            prefs[Keys.PROFILE_ROLE] = "USER"
             prefs[Keys.IS_FIREBASE_SIGNED_IN] = false
+            prefs[Keys.IS_EMAIL_VERIFIED] = false
             prefs[Keys.IS_ADMIN] = false
         }
     }
@@ -171,8 +188,10 @@ class SessionManager(private val context: Context) {
     suspend fun setAdminSession(isAdmin: Boolean, email: String? = null) {
         context.communityDataStore.edit { prefs ->
             prefs[Keys.IS_ADMIN] = isAdmin
+            prefs[Keys.PROFILE_ROLE] = if (isAdmin) "ADMIN" else "USER"
             if (isAdmin && !email.isNullOrBlank()) {
                 prefs[Keys.PROFILE_EMAIL] = email
+                prefs[Keys.IS_EMAIL_VERIFIED] = true
                 if (prefs[Keys.PROFILE_NAME].isNullOrBlank() || prefs[Keys.PROFILE_NAME] == "عضو RESPECT") {
                     prefs[Keys.PROFILE_NAME] = "إدارة RESPECT"
                 }

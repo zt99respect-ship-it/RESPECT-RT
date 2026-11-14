@@ -1,16 +1,9 @@
 package com.respect.community.auth
 
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.util.Base64
-import androidx.browser.customtabs.CustomTabColorSchemeParams
-import androidx.browser.customtabs.CustomTabsIntent
 import com.respect.community.BuildConfig
 import com.respect.community.data.local.SessionManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -21,39 +14,23 @@ object KickOAuthManager {
     // تم تثبيت الرابط هنا ليتطابق مع لوحة تحكم KICK
     const val REDIRECT_URI = "https://docs.kick.com"
 
-    suspend fun launchOAuthLogin(context: Context, sessionManager: SessionManager) {
+    suspend fun prepareAuthorizeUrl(sessionManager: SessionManager): String {
         val verifier = generateCodeVerifier()
         val challenge = generateCodeChallenge(verifier)
         val state = generateRandomState()
 
         sessionManager.savePendingPkce(verifier = verifier, state = state)
 
-        val authUri = Uri.parse(AUTHORIZE_ENDPOINT).buildUpon()
+        return Uri.parse(AUTHORIZE_ENDPOINT).buildUpon()
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("client_id", BuildConfig.KICK_CLIENT_ID)
-            .appendQueryParameter("redirect_uri", REDIRECT_URI) // استخدام الرابط المثبت
+            .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .appendQueryParameter("scope", SCOPES)
             .appendQueryParameter("code_challenge", challenge)
             .appendQueryParameter("code_challenge_method", "S256")
             .appendQueryParameter("state", state)
             .build()
-
-        withContext(Dispatchers.Main) {
-            val colors = CustomTabColorSchemeParams.Builder()
-                .setToolbarColor(0xFF0A0416.toInt())
-                .setNavigationBarColor(0xFF0A0416.toInt())
-                .build()
-
-            val customTabsIntent = CustomTabsIntent.Builder()
-                .setDefaultColorSchemeParams(colors)
-                .setShowTitle(true)
-                .build()
-
-            if (context !is Activity) {
-                customTabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            customTabsIntent.launchUrl(context, authUri)
-        }
+            .toString()
     }
 
     private fun generateCodeVerifier(): String {

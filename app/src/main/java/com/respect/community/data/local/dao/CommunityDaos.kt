@@ -12,6 +12,7 @@ import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.ClipEntity
 import com.respect.community.data.local.entity.CommunityUserEntity
 import com.respect.community.data.local.entity.ScheduleEventEntity
+import com.respect.community.data.local.entity.StreamSnapshotEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.SuggestionEntity
 import com.respect.community.data.local.entity.TimelinePostEntity
@@ -19,7 +20,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StreamerDao {
-    @Query("SELECT * FROM streamers ORDER BY isLive DESC, viewerCount DESC, displayName ASC")
+    @Query("SELECT * FROM streamers ORDER BY isFeatured DESC, isLive DESC, viewerCount DESC, displayName ASC")
     fun observeAll(): Flow<List<StreamerEntity>>
 
     @Query("SELECT * FROM streamers WHERE slug = :slug LIMIT 1")
@@ -45,6 +46,30 @@ interface StreamerDao {
 
     @Query("UPDATE streamers SET isFollowed = :isFollowed WHERE slug = :slug")
     suspend fun updateFollowed(slug: String, isFollowed: Boolean)
+
+    @Query("UPDATE streamers SET isNotifying = :isNotifying WHERE slug = :slug")
+    suspend fun updateNotifying(slug: String, isNotifying: Boolean)
+
+    @Query("UPDATE streamers SET isFeatured = :isFeatured WHERE slug = :slug")
+    suspend fun updateFeatured(slug: String, isFeatured: Boolean)
+}
+
+@Dao
+interface StreamSnapshotDao {
+    @Query("SELECT * FROM stream_snapshots ORDER BY recordedAtMs DESC LIMIT 2000")
+    fun observeAll(): Flow<List<StreamSnapshotEntity>>
+
+    @Query("SELECT * FROM stream_snapshots WHERE recordedAtMs >= :sinceMs ORDER BY recordedAtMs DESC")
+    fun observeSince(sinceMs: Long): Flow<List<StreamSnapshotEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(snapshot: StreamSnapshotEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(snapshots: List<StreamSnapshotEntity>)
+
+    @Query("SELECT COUNT(*) FROM stream_snapshots")
+    suspend fun count(): Int
 }
 
 @Dao
@@ -82,7 +107,7 @@ interface ScheduleDao {
 
 @Dao
 interface TimelineDao {
-    @Query("SELECT * FROM timeline_posts ORDER BY isOfficialAnnouncement DESC, createdAt DESC")
+    @Query("SELECT * FROM timeline_posts ORDER BY isPinned DESC, isOfficialAnnouncement DESC, createdAt DESC")
     fun observeAll(): Flow<List<TimelinePostEntity>>
 
     @Query("SELECT * FROM timeline_posts WHERE content LIKE '%' || :q || '%' OR authorName LIKE '%' || :q || '%'")
@@ -91,11 +116,20 @@ interface TimelineDao {
     @Query("SELECT COUNT(*) FROM timeline_posts")
     suspend fun count(): Int
 
+    @Query("SELECT * FROM timeline_posts WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getByRemoteIdOnce(remoteId: String): TimelinePostEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(post: TimelinePostEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(posts: List<TimelinePostEntity>)
+
     @Query("UPDATE timeline_posts SET isLikedByMe = :liked, likesCount = CASE WHEN :liked THEN likesCount + 1 ELSE MAX(0, likesCount - 1) END WHERE id = :id")
     suspend fun toggleLike(id: Long, liked: Boolean)
+
+    @Query("UPDATE timeline_posts SET isPinned = :pinned WHERE id = :id")
+    suspend fun updatePinned(id: Long, pinned: Boolean)
 
     @Query("DELETE FROM timeline_posts WHERE id = :id")
     suspend fun deleteById(id: Long)
@@ -211,12 +245,16 @@ interface CommunityUserDao {
     @Query("UPDATE community_users SET role = :role, updatedAt = :updatedAt WHERE uid = :uid")
     suspend fun updateRole(uid: String, role: String, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE community_users SET isMuted = :muted, mutedUntilMs = :untilMs, banReason = :reason, updatedAt = :updatedAt WHERE uid = :uid")
-    suspend fun updateMute(
+    @Query("UPDATE community_users SET banned = :banned, isMuted = :muted, mutedUntilMs = :untilMs, banReason = :reason, updatedAt = :updatedAt WHERE uid = :uid")
+    suspend fun updateModeration(
         uid: String,
+        banned: Boolean,
         muted: Boolean,
         untilMs: Long,
         reason: String,
         updatedAt: Long = System.currentTimeMillis()
     )
+
+    @Query("DELETE FROM community_users WHERE uid = :uid")
+    suspend fun deleteByUid(uid: String)
 }

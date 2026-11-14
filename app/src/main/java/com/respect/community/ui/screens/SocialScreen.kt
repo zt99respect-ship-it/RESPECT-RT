@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -29,21 +30,25 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,8 +70,10 @@ import com.respect.community.ui.components.GlassFilterChip
 import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.RespectImage
 import com.respect.community.ui.components.ScaleBounceButton
+import com.respect.community.ui.components.ShimmerCardSkeleton
 import com.respect.community.ui.components.TelegraphImagePickerButton
-import com.respect.community.ui.theme.CyanAccent
+import com.respect.community.ui.components.VideoLinkPlayer
+import com.respect.community.ui.theme.GlassBorder
 import com.respect.community.ui.theme.GoldAccent
 import com.respect.community.ui.theme.RespectPurple
 import com.respect.community.ui.theme.RespectPurpleBright
@@ -80,29 +87,83 @@ import kotlin.math.roundToInt
 fun TimelineFeedContent(
     posts: List<TimelinePostEntity>,
     isAdmin: Boolean,
+    isInitialLoading: Boolean,
+    hasMorePosts: Boolean,
+    isLoadingMorePosts: Boolean,
+    onLoadMorePosts: () -> Unit,
     onTogglePostLike: (TimelinePostEntity) -> Unit,
-    onDeletePost: (Long) -> Unit,
+    onTogglePinPost: (TimelinePostEntity) -> Unit,
+    onDeletePost: (TimelinePostEntity) -> Unit,
     onBanUserOneDay: (String, String, String) -> Unit
 ) {
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember(posts.size, hasMorePosts, isLoadingMorePosts) {
+        derivedStateOf {
+            val total = listState.layoutInfo.totalItemsCount
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            total > 0 && lastVisible >= total - 2 && hasMorePosts && !isLoadingMorePosts
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            onLoadMorePosts()
+        }
+    }
+
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(posts, key = { it.id }) { post ->
-            TimelinePostCard(
-                post = post,
-                isAdmin = isAdmin,
-                onLike = { onTogglePostLike(post) },
-                onDelete = { onDeletePost(post.id) },
-                onBanOneDay = {
-                    onBanUserOneDay(
-                        post.authorIdentifier,
-                        post.authorName,
-                        "تقييد من الإدارة على منشور التايملاين"
-                    )
+        if (isInitialLoading && posts.isEmpty()) {
+            items(4) { ShimmerCardSkeleton() }
+        } else {
+            items(posts, key = { it.id }) { post ->
+                TimelinePostCard(
+                    post = post,
+                    isAdmin = isAdmin,
+                    onLike = { onTogglePostLike(post) },
+                    onTogglePin = { onTogglePinPost(post) },
+                    onDelete = { onDeletePost(post) },
+                    onBanOneDay = {
+                        onBanUserOneDay(
+                            post.authorIdentifier,
+                            post.authorName,
+                            "تقييد من الإدارة على منشور التايملاين"
+                        )
+                    }
+                )
+            }
+
+            if (isLoadingMorePosts) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = RespectPurpleBright,
+                            strokeWidth = 2.dp
+                        )
+                    }
                 }
-            )
+            } else if (hasMorePosts && posts.isNotEmpty()) {
+                item {
+                    OutlinedButton(
+                        onClick = onLoadMorePosts,
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, GlassBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("تحميل 10 منشورات إضافية", color = TextPrimary, fontSize = 13.sp)
+                    }
+                }
+            }
         }
     }
 }
@@ -292,26 +353,49 @@ private fun TimelinePostCard(
     post: TimelinePostEntity,
     isAdmin: Boolean,
     onLike: () -> Unit,
+    onTogglePin: () -> Unit,
     onDelete: () -> Unit,
     onBanOneDay: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    HazeGlassCard(isGlowing = post.isOfficialAnnouncement) {
-        if (post.isOfficialAnnouncement) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = RespectPurple.copy(alpha = 0.20f),
-                border = BorderStroke(1.dp, RespectPurpleBright.copy(alpha = 0.55f)),
+    HazeGlassCard(isGlowing = post.isOfficialAnnouncement || post.isPinned) {
+        if (post.isPinned || post.isOfficialAnnouncement) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(bottom = 8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.Rounded.Campaign, contentDescription = null, tint = RespectPurpleBright, modifier = Modifier.size(16.dp))
-                    Text("إعلان رسمي من RESPECT", color = RespectPurpleBright, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                if (post.isPinned) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = GoldAccent.copy(alpha = 0.16f),
+                        border = BorderStroke(1.dp, GoldAccent.copy(alpha = 0.45f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Rounded.PushPin, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(14.dp))
+                            Text("منشور مثبّت", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                if (post.isOfficialAnnouncement) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = RespectPurple.copy(alpha = 0.20f),
+                        border = BorderStroke(1.dp, RespectPurpleBright.copy(alpha = 0.55f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Rounded.Campaign, contentDescription = null, tint = RespectPurpleBright, modifier = Modifier.size(15.dp))
+                            Text("إعلان رسمي من RESPECT", color = RespectPurpleBright, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -357,6 +441,14 @@ private fun TimelinePostCard(
                         containerColor = RespectSurface
                     ) {
                         DropdownMenuItem(
+                            text = { Text(if (post.isPinned) "إلغاء التثبيت" else "تثبيت المنشور بالأعلى", color = RespectPurpleBright) },
+                            leadingIcon = { Icon(Icons.Rounded.PushPin, contentDescription = null, tint = RespectPurpleBright) },
+                            onClick = {
+                                menuExpanded = false
+                                onTogglePin()
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("حذف المنشور", color = Color(0xFFFCA5A5)) },
                             leadingIcon = { Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFFFCA5A5)) },
                             onClick = {
@@ -387,20 +479,13 @@ private fun TimelinePostCard(
         if (post.mediaUrl.isNotBlank()) {
             Spacer(modifier = Modifier.height(10.dp))
             if (post.mediaType == "VIDEO") {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = RespectSurface,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Rounded.PlayCircle, contentDescription = null, tint = CyanAccent)
-                        Text(post.mediaUrl, color = CyanAccent, fontSize = 12.sp, maxLines = 1)
-                    }
-                }
+                VideoLinkPlayer(
+                    videoUrl = post.mediaUrl,
+                    autoPlay = false,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                )
             } else {
                 RespectImage(
                     url = post.mediaUrl,
@@ -453,7 +538,7 @@ fun ComposeTimelineDialog(
                     minLines = 3
                 )
                 TelegraphImagePickerButton(
-                    label = "اختر وارفع صورة via Telegraph",
+                    label = "ضغط ورفع صورة عبر Telegraph",
                     onUploadImage = onUploadImage,
                     onUploadedUrl = { url ->
                         mediaUrl = url
@@ -462,8 +547,16 @@ fun ComposeTimelineDialog(
                 )
                 OutlinedTextField(
                     value = mediaUrl,
-                    onValueChange = { mediaUrl = it },
-                    label = { Text("رابط صورة Telegraph أو فيديو (اختياري)") },
+                    onValueChange = {
+                        mediaUrl = it
+                        val lower = it.lowercase()
+                        if (lower.contains("tiktok.com") || lower.contains("x.com") || lower.contains("twitter.com") ||
+                            lower.endsWith(".mp4") || lower.contains(".m3u8")
+                        ) {
+                            mediaType = "VIDEO"
+                        }
+                    },
+                    label = { Text("رابط صورة أو فيديو (TikTok / X / MP4 / HLS)") },
                     singleLine = true
                 )
                 if (mediaUrl.isNotBlank()) {

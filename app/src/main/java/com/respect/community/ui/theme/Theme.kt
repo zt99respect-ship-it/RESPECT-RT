@@ -9,9 +9,20 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.respect.community.R
+
+val CairoFontFamily = FontFamily(
+    Font(R.font.cairo_regular, FontWeight.Normal),
+    Font(R.font.cairo_regular, FontWeight.Medium),
+    Font(R.font.cairo_bold, FontWeight.SemiBold),
+    Font(R.font.cairo_bold, FontWeight.Bold),
+    Font(R.font.cairo_bold, FontWeight.ExtraBold)
+)
 
 private val RespectDarkColorScheme = darkColorScheme(
     primary = RespectPurple,
@@ -31,34 +42,20 @@ private val RespectDarkColorScheme = darkColorScheme(
 )
 
 private val RespectTypography = Typography(
-    headlineMedium = TextStyle(
-        fontSize = 21.sp,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.3).sp,
-        color = TextPrimary
-    ),
-    titleMedium = TextStyle(
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Bold,
-        color = TextPrimary
-    ),
-    bodyLarge = TextStyle(
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Normal,
-        lineHeight = 21.sp,
-        color = TextPrimary
-    ),
-    bodyMedium = TextStyle(
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Normal,
-        lineHeight = 19.sp,
-        color = TextSecondary
-    ),
-    labelMedium = TextStyle(
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = TextSecondary
-    )
+    displayLarge = TextStyle(fontFamily = CairoFontFamily, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    displayMedium = TextStyle(fontFamily = CairoFontFamily, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    headlineLarge = TextStyle(fontFamily = CairoFontFamily, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    headlineMedium = TextStyle(fontFamily = CairoFontFamily, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    headlineSmall = TextStyle(fontFamily = CairoFontFamily, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    titleLarge = TextStyle(fontFamily = CairoFontFamily, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    titleMedium = TextStyle(fontFamily = CairoFontFamily, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    titleSmall = TextStyle(fontFamily = CairoFontFamily, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    bodyLarge = TextStyle(fontFamily = CairoFontFamily, fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 22.sp, color = TextPrimary),
+    bodyMedium = TextStyle(fontFamily = CairoFontFamily, fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp, color = TextSecondary),
+    bodySmall = TextStyle(fontFamily = CairoFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = 18.sp, color = TextMuted),
+    labelLarge = TextStyle(fontFamily = CairoFontFamily, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+    labelMedium = TextStyle(fontFamily = CairoFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondary),
+    labelSmall = TextStyle(fontFamily = CairoFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Normal, color = TextMuted)
 )
 
 @Composable

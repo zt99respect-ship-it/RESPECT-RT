@@ -29,20 +29,33 @@ service cloud.firestore {
       );
     }
 
-    function isNotMuted() {
-      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isMuted == false;
+    function isModerator() {
+      return isAdmin() || (
+        isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['ADMIN', 'MODERATOR']
+      );
+    }
+
+    function isNotBanned() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.banned == false
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isMuted == false
+      );
     }
 
     function isValidUserCreate(data, uid) {
-      return data.keys().hasAll(['uid', 'displayName', 'role', 'isMuted', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'displayName', 'email', 'avatarUrl', 'bio', 'role', 'isMuted', 'mutedUntilMs', 'banReason', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'banned', 'isMuted', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'avatarUrl', 'bannerUrl', 'bio', 'role', 'banned', 'isMuted', 'mutedUntilMs', 'banReason', 'fcmToken', 'createdAt', 'updatedAt'])
         && data.uid == uid
         && data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 80
         && (!('email' in data) || (data.email is string && data.email.size() <= 160))
         && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512))
+        && (!('bannerUrl' in data) || (data.bannerUrl is string && data.bannerUrl.size() <= 512))
         && (!('bio' in data) || (data.bio is string && data.bio.size() <= 300))
+        && (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 512))
         && data.role == 'USER'
+        && data.banned == false
         && data.isMuted == false
         && data.createdAt is number
         && data.updatedAt is number;
@@ -52,8 +65,11 @@ service cloud.firestore {
       return data.uid == uid
         && data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 80
         && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512))
+        && (!('bannerUrl' in data) || (data.bannerUrl is string && data.bannerUrl.size() <= 512))
         && (!('bio' in data) || (data.bio is string && data.bio.size() <= 300))
-        && data.role in ['USER', 'ADMIN']
+        && (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 512))
+        && data.role in ['USER', 'MODERATOR', 'ADMIN']
+        && data.banned is bool
         && data.isMuted is bool
         && data.createdAt == existing().createdAt
         && data.updatedAt is number;
@@ -76,7 +92,7 @@ service cloud.firestore {
       allow update: if isSignedIn() && isValidId(uid) && isValidUserUpdate(incoming(), uid) && (
         isAdmin() || (
           request.auth.uid == uid
-          && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'bio', 'updatedAt'])
+          && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'bannerUrl', 'bio', 'fcmToken', 'updatedAt'])
         )
       );
       allow delete: if isAdmin();
@@ -92,18 +108,37 @@ service cloud.firestore {
 
     match /timeline_posts/{postId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidId(postId) && isNotMuted()
+      allow create: if isSignedIn() && isValidId(postId) && isNotBanned()
         && incoming().authorUid == request.auth.uid
         && incoming().authorName is string && incoming().authorName.size() <= 80
         && incoming().content is string && incoming().content.size() <= 1200
-        && (!incoming().isOfficialAnnouncement || isAdmin());
+        && (!incoming().isOfficialAnnouncement || isAdmin())
+        && (!incoming().isPinned || isModerator());
       allow update: if isSignedIn() && isValidId(postId) && (
-        isAdmin() || (
-          incoming().diff(existing()).affectedKeys().hasOnly(['likesCount'])
-          && incoming().likesCount is number
-        )
+        isAdmin() ||
+        (isModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['isPinned'])) ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']) && incoming().likesCount is number)
       );
-      allow delete: if isAdmin() || (isSignedIn() && existing().authorUid == request.auth.uid);
+      allow delete: if isModerator() || (isSignedIn() && existing().authorUid == request.auth.uid);
+    }
+
+    match /stream_analytics/{snapshotId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(snapshotId)
+        && incoming().streamerSlug is string && incoming().streamerSlug.size() <= 80
+        && incoming().streamerName is string && incoming().streamerName.size() <= 80
+        && incoming().isLive is bool
+        && incoming().viewerCount is number
+        && incoming().followerCount is number
+        && incoming().recordedAtMs is number;
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      allow get, list: if isAdmin() || (
+        isSignedIn() && (resource.data.targetUid == '' || resource.data.targetUid == request.auth.uid)
+      );
+      allow create, update, delete: if isAdmin();
     }
 
     match /stream_schedule/{eventId} {
@@ -122,39 +157,39 @@ service cloud.firestore {
 
     match /general_chat/{messageId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidId(messageId) && isNotMuted()
+      allow create: if isSignedIn() && isValidId(messageId) && isNotBanned()
         && incoming().senderUid == request.auth.uid
         && incoming().content is string && incoming().content.size() > 0 && incoming().content.size() <= 600;
-      allow delete: if isAdmin();
+      allow delete: if isModerator();
     }
 
     match /clips/{clipId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidId(clipId) && isNotMuted()
+      allow create: if isSignedIn() && isValidId(clipId) && isNotBanned()
         && incoming().uploadedByUid == request.auth.uid
         && incoming().title is string && incoming().title.size() <= 160
         && incoming().videoUrl is string && incoming().videoUrl.size() <= 512;
-      allow update: if isSignedIn() && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']));
-      allow delete: if isAdmin();
+      allow update: if isSignedIn() && (isModerator() || incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']));
+      allow delete: if isModerator();
     }
 
     match /artworks/{artId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidId(artId) && isNotMuted()
+      allow create: if isSignedIn() && isValidId(artId) && isNotBanned()
         && incoming().uploadedByUid == request.auth.uid
         && incoming().title is string && incoming().title.size() <= 140
         && incoming().imageUrl is string && incoming().imageUrl.size() <= 512;
-      allow update: if isSignedIn() && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']));
-      allow delete: if isAdmin();
+      allow update: if isSignedIn() && (isModerator() || incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']));
+      allow delete: if isModerator();
     }
 
     match /analyses/{analysisId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidId(analysisId) && isNotMuted()
+      allow create: if isSignedIn() && isValidId(analysisId) && isNotBanned()
         && incoming().authorUid == request.auth.uid
         && incoming().title is string && incoming().title.size() <= 140
         && incoming().analysisText is string && incoming().analysisText.size() <= 1200;
-      allow delete: if isAdmin();
+      allow delete: if isModerator();
     }
 
     match /app_settings/{docId} {

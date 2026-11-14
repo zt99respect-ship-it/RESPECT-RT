@@ -7,6 +7,10 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 fun readFirebaseField(rootDir: File, key: String, fallback: String = ""): String {
     val configFile = File(rootDir, "firebase-applet-config.json")
     if (!configFile.exists()) return fallback
@@ -104,11 +108,18 @@ dependencies {
     // Haze Glassmorphism Blur
     implementation("dev.chrisbanes.haze:haze:1.1.1")
 
-    // Firebase (Auth, Firestore, Remote Config)
+    // Firebase (Auth, Firestore, FCM, Remote Config)
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-config-ktx")
+
+    // WorkManager for 10-min KICK Analytics & Custom Push
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Compressor for safe <5MB image compression before Telegraph upload
+    implementation("id.zelory:compressor:3.0.1")
 
     // Networking: Retrofit + OkHttp + Gson
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

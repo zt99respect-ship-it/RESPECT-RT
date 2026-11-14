@@ -17,13 +17,30 @@ data class StreamerEntity(
     val categoryName: String = "بث مباشر",
     val viewerCount: Int = 0,
     val peakViewers: Int = 0,
+    val followerCount: Int = 0,
     val playbackUrl: String = "",
     val thumbnailUrl: String = "",
     val chatroomId: Long = 0L,
     val startedAt: String = "",
+    val isGlobal: Boolean = false,
+    val isFeatured: Boolean = false,
+    val isNotifying: Boolean = true,
     val isFavorite: Boolean = true,
     val isFollowed: Boolean = false,
     val lastUpdatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "stream_snapshots")
+data class StreamSnapshotEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val streamerSlug: String,
+    val streamerName: String,
+    val isLive: Boolean,
+    val viewerCount: Int,
+    val followerCount: Int,
+    val streamTitle: String = "",
+    val recordedAtMs: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "streamer_suggestions")
@@ -34,7 +51,7 @@ data class SuggestionEntity(
     val characterNames: String,
     val reason: String,
     val suggestedBy: String,
-    val status: String = "PENDING", // PENDING, APPROVED, REJECTED
+    val status: String = "PENDING",
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -56,11 +73,13 @@ data class TimelinePostEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val remoteId: String = "",
+    val authorUid: String = "",
     val authorName: String,
     val authorIdentifier: String,
     val authorAvatarUrl: String = "",
     val isAdminPost: Boolean = false,
     val isOfficialAnnouncement: Boolean = false,
+    val isPinned: Boolean = false,
     val content: String,
     val mediaUrl: String = "",
     val mediaType: String = "NONE", // NONE, IMAGE, VIDEO
@@ -114,7 +133,7 @@ data class ArtEntity(
 data class ChatMessageEntity(
     @PrimaryKey
     val id: String,
-    val roomKey: String, // "general" or "kick:<slug>"
+    val roomKey: String,
     val senderName: String,
     val senderColor: String = "#A78BFA",
     val isAdmin: Boolean = false,
@@ -139,8 +158,10 @@ data class CommunityUserEntity(
     val displayName: String,
     val email: String = "",
     val avatarUrl: String = "",
+    val bannerUrl: String = "",
     val bio: String = "",
-    val role: String = "USER", // USER, ADMIN
+    val role: String = "USER", // USER, MODERATOR, ADMIN
+    val banned: Boolean = false,
     val isMuted: Boolean = false,
     val mutedUntilMs: Long = 0L,
     val banReason: String = "",
