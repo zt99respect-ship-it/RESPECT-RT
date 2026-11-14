@@ -51,10 +51,8 @@ data class AdminNotificationPayload(
 
 class FirebaseManager(context: Context) {
 
-    val isConfigured: Boolean =
-        BuildConfig.FIREBASE_API_KEY.isNotBlank() &&
-            BuildConfig.FIREBASE_APP_ID.isNotBlank() &&
-            BuildConfig.FIREBASE_PROJECT_ID.isNotBlank()
+    var isConfigured: Boolean = false
+        private set
 
     private var firebaseApp: FirebaseApp? = null
     var auth: FirebaseAuth? = null
@@ -67,7 +65,11 @@ class FirebaseManager(context: Context) {
     init {
         runCatching {
             val existingApp = FirebaseApp.getApps(context).firstOrNull()
-            val app = existingApp ?: if (isConfigured) {
+            val hasAppletConfig = BuildConfig.FIREBASE_API_KEY.isNotBlank() &&
+                BuildConfig.FIREBASE_APP_ID.isNotBlank() &&
+                BuildConfig.FIREBASE_PROJECT_ID.isNotBlank()
+
+            val app = existingApp ?: if (hasAppletConfig) {
                 val options = FirebaseOptions.Builder()
                     .setApiKey(BuildConfig.FIREBASE_API_KEY)
                     .setApplicationId(BuildConfig.FIREBASE_APP_ID)
@@ -77,12 +79,13 @@ class FirebaseManager(context: Context) {
                     .build()
                 FirebaseApp.initializeApp(context, options)
             } else {
-                null
+                FirebaseApp.initializeApp(context)
             }
             if (app != null) {
                 firebaseApp = app
-                auth = FirebaseAuth.getInstance(app)
-                firestore = if (BuildConfig.FIREBASE_DATABASE_ID.isNotBlank()) {
+                auth = if (existingApp != null) FirebaseAuth.getInstance() else FirebaseAuth.getInstance(app)
+                val sameAppletProject = app.options.projectId == BuildConfig.FIREBASE_PROJECT_ID
+                firestore = if (sameAppletProject && BuildConfig.FIREBASE_DATABASE_ID.isNotBlank()) {
                     FirebaseFirestore.getInstance(app, BuildConfig.FIREBASE_DATABASE_ID)
                 } else {
                     FirebaseFirestore.getInstance(app)
@@ -101,6 +104,7 @@ class FirebaseManager(context: Context) {
                         )
                     )
                 }
+                isConfigured = auth != null && firestore != null
             }
         }.onFailure {
             Log.e(TAG, "Firebase init failed: ${it.message}")
@@ -133,8 +137,10 @@ class FirebaseManager(context: Context) {
         FirebaseMessaging.getInstance().token.await()
     }.getOrNull()
 
+    private fun resolveAuth(): FirebaseAuth? = auth ?: runCatching { FirebaseAuth.getInstance() }.getOrNull()?.also { auth = it }
+
     suspend fun signInWithEmail(email: String, password: String): Result<FirebaseUser> = runCatching {
-        val firebaseAuth = auth ?: error("Firebase غير مفعّل")
+        val firebaseAuth = resolveAuth() ?: error("Firebase غير مفعّل")
         val res = firebaseAuth.signInWithEmailAndPassword(email.trim(), password).await()
         res.user ?: error("تعذر تسجيل الدخول")
     }
@@ -144,7 +150,7 @@ class FirebaseManager(context: Context) {
         password: String,
         displayName: String
     ): Result<FirebaseUser> = runCatching {
-        val firebaseAuth = auth ?: error("Firebase غير مفعّل")
+        val firebaseAuth = resolveAuth() ?: error("Firebase غير مفعّل")
         val res = firebaseAuth.createUserWithEmailAndPassword(email.trim(), password).await()
         val user = res.user ?: error("تعذر إنشاء الحساب")
         if (displayName.isNotBlank()) {
@@ -168,18 +174,19 @@ class FirebaseManager(context: Context) {
     }
 
     suspend fun sendVerificationEmail(): Result<Unit> = runCatching {
-        val user = auth?.currentUser ?: error("لا يوجد مستخدم مسجل حالياً")
+        val user = resolveAuth()?.currentUser ?: error("لا يوجد مستخدم مسجل حالياً")
         user.sendEmailVerification().await()
     }
 
     suspend fun reloadCurrentUser(): FirebaseUser? {
-        val user = auth?.currentUser ?: return null
+        val firebaseAuth = resolveAuth() ?: return null
+        val user = firebaseAuth.currentUser ?: return null
         runCatching { user.reload().await() }
-        return auth?.currentUser
+        return firebaseAuth.currentUser
     }
 
     fun signOut() {
-        auth?.signOut()
+        resolveAuth()?.signOut()
     }
 
     suspend fun syncUserProfile(user: CommunityUserEntity, fcmToken: String? = null) {
