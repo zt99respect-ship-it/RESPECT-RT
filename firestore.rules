@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'zt.99.respect@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isNotMuted() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isMuted == false;
+    }
+
+    function isValidUserCreate(data, uid) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'isMuted', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'avatarUrl', 'bio', 'role', 'isMuted', 'mutedUntilMs', 'banReason', 'createdAt', 'updatedAt'])
+        && data.uid == uid
+        && data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 80
+        && (!('email' in data) || (data.email is string && data.email.size() <= 160))
+        && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 300))
+        && data.role == 'USER'
+        && data.isMuted == false
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidUserUpdate(data, uid) {
+      return data.uid == uid
+        && data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 80
+        && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 300))
+        && data.role in ['USER', 'ADMIN']
+        && data.isMuted is bool
+        && data.createdAt == existing().createdAt
+        && data.updatedAt is number;
+    }
+
+    match /admins/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    match /test/connection {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    match /users/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(uid) && request.auth.uid == uid && isValidUserCreate(incoming(), uid);
+      allow update: if isSignedIn() && isValidId(uid) && isValidUserUpdate(incoming(), uid) && (
+        isAdmin() || (
+          request.auth.uid == uid
+          && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'bio', 'updatedAt'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /streamers/{slug} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && isValidId(slug) && isAdmin()
+        && incoming().slug == slug
+        && incoming().displayName is string && incoming().displayName.size() <= 80;
+      allow delete: if isAdmin();
+    }
+
+    match /timeline_posts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(postId) && isNotMuted()
+        && incoming().authorUid == request.auth.uid
+        && incoming().authorName is string && incoming().authorName.size() <= 80
+        && incoming().content is string && incoming().content.size() <= 1200
+        && (!incoming().isOfficialAnnouncement || isAdmin());
+      allow update: if isSignedIn() && isValidId(postId) && (
+        isAdmin() || (
+          incoming().diff(existing()).affectedKeys().hasOnly(['likesCount'])
+          && incoming().likesCount is number
+        )
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().authorUid == request.auth.uid);
+    }
+
+    match /stream_schedule/{eventId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /streamer_suggestions/{suggestionId} {
+      allow get, list: if isAdmin() || (isSignedIn() && resource.data.suggestedByUid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(suggestionId)
+        && incoming().suggestedByUid == request.auth.uid
+        && incoming().kickUsername is string && incoming().kickUsername.size() <= 80
+        && incoming().status == 'PENDING';
+      allow update, delete: if isAdmin();
+    }
+
+    match /general_chat/{messageId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(messageId) && isNotMuted()
+        && incoming().senderUid == request.auth.uid
+        && incoming().content is string && incoming().content.size() > 0 && incoming().content.size() <= 600;
+      allow delete: if isAdmin();
+    }
+
+    match /clips/{clipId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(clipId) && isNotMuted()
+        && incoming().uploadedByUid == request.auth.uid
+        && incoming().title is string && incoming().title.size() <= 160
+        && incoming().videoUrl is string && incoming().videoUrl.size() <= 512;
+      allow update: if isSignedIn() && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']));
+      allow delete: if isAdmin();
+    }
+
+    match /artworks/{artId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(artId) && isNotMuted()
+        && incoming().uploadedByUid == request.auth.uid
+        && incoming().title is string && incoming().title.size() <= 140
+        && incoming().imageUrl is string && incoming().imageUrl.size() <= 512;
+      allow update: if isSignedIn() && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']));
+      allow delete: if isAdmin();
+    }
+
+    match /analyses/{analysisId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(analysisId) && isNotMuted()
+        && incoming().authorUid == request.auth.uid
+        && incoming().title is string && incoming().title.size() <= 140
+        && incoming().analysisText is string && incoming().analysisText.size() <= 1200;
+      allow delete: if isAdmin();
+    }
+
+    match /app_settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

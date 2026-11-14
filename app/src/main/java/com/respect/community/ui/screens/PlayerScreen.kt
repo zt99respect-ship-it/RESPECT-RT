@@ -2,6 +2,7 @@ package com.respect.community.ui.screens
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -93,7 +95,6 @@ import com.respect.community.ui.theme.TextPrimary
 import com.respect.community.ui.theme.TextSecondary
 import com.respect.community.ui.theme.VoidBlack
 import com.respect.community.ui.viewmodel.PlayerViewModel
-import com.respect.community.ui.viewmodel.StreamQuality
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -106,7 +107,9 @@ fun PlayerScreen(
     val messages by viewModel.kickChatMessages.collectAsStateWithLifecycle()
     val chatState by viewModel.chatConnectionState.collectAsStateWithLifecycle()
     val kickAuth by viewModel.kickAuthSession.collectAsStateWithLifecycle()
+    val availableQualities by viewModel.availableQualities.collectAsStateWithLifecycle()
     val selectedQuality by viewModel.selectedQuality.collectAsStateWithLifecycle()
+    val isBuffering by viewModel.isBuffering.collectAsStateWithLifecycle()
     val isMuted by viewModel.isMuted.collectAsStateWithLifecycle()
     val isFullscreen by viewModel.isFullscreen.collectAsStateWithLifecycle()
     val playerError by viewModel.playerError.collectAsStateWithLifecycle()
@@ -181,12 +184,17 @@ fun PlayerScreen(
                         PlayerView(ctx).apply {
                             player = viewModel.exoPlayer
                             useController = false
+                            // Remove subtitle overlay completely
+                            subtitleView?.visibility = View.GONE
                             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                             layoutParams = FrameLayout.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
                         }
+                    },
+                    update = { pv ->
+                        pv.subtitleView?.visibility = View.GONE
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -208,9 +216,19 @@ fun PlayerScreen(
                 }
             }
 
+            if (isBuffering && current?.isLive == true) {
+                CircularProgressIndicator(
+                    color = RespectPurpleBright,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(40.dp)
+                )
+            }
+
             if (playerError != null) {
                 Surface(
-                    color = Color(0xCC0A0416),
+                    color = Color(0xCC090B10),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -229,7 +247,7 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0x55000000))
+                        .background(Color(0x4D000000))
                         .padding(8.dp)
                 ) {
                     Row(
@@ -245,7 +263,7 @@ fun PlayerScreen(
                         if (current?.isLive == true) LivePulseBadge()
                     }
 
-                    if (current?.isLive == true) {
+                    if (current?.isLive == true && !isBuffering) {
                         IconButton(
                             onClick = {
                                 if (viewModel.exoPlayer.isPlaying) viewModel.exoPlayer.pause() else viewModel.exoPlayer.play()
@@ -254,7 +272,7 @@ fun PlayerScreen(
                                 .align(Alignment.Center)
                                 .size(52.dp)
                                 .clip(CircleShape)
-                                .background(Color(0x88150A2E))
+                                .background(Color(0x99151924))
                         ) {
                             Icon(
                                 if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
@@ -285,7 +303,7 @@ fun PlayerScreen(
                                 Surface(
                                     onClick = { showQualityMenu = true },
                                     shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xCC150A2E)
+                                    color = Color(0xCC151924)
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -302,13 +320,14 @@ fun PlayerScreen(
                                     onDismissRequest = { showQualityMenu = false },
                                     containerColor = RespectSurface
                                 ) {
-                                    StreamQuality.entries.forEach { q ->
+                                    availableQualities.forEach { q ->
+                                        val isSelected = q.id == selectedQuality.id
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
                                                     q.label,
-                                                    color = if (q == selectedQuality) RespectPurpleBright else TextPrimary,
-                                                    fontWeight = if (q == selectedQuality) FontWeight.Bold else FontWeight.Normal
+                                                    color = if (isSelected) RespectPurpleBright else TextPrimary,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                                 )
                                             },
                                             onClick = {

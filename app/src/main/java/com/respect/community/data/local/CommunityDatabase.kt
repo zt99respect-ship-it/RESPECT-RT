@@ -9,6 +9,7 @@ import com.respect.community.data.local.dao.ArtDao
 import com.respect.community.data.local.dao.BannedUserDao
 import com.respect.community.data.local.dao.ChatMessageDao
 import com.respect.community.data.local.dao.ClipDao
+import com.respect.community.data.local.dao.CommunityUserDao
 import com.respect.community.data.local.dao.ScheduleDao
 import com.respect.community.data.local.dao.StreamerDao
 import com.respect.community.data.local.dao.SuggestionDao
@@ -18,6 +19,7 @@ import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.BannedUserEntity
 import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.ClipEntity
+import com.respect.community.data.local.entity.CommunityUserEntity
 import com.respect.community.data.local.entity.ScheduleEventEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.SuggestionEntity
@@ -33,9 +35,10 @@ import com.respect.community.data.local.entity.TimelinePostEntity
         ClipEntity::class,
         ArtEntity::class,
         ChatMessageEntity::class,
-        BannedUserEntity::class
+        BannedUserEntity::class,
+        CommunityUserEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class CommunityDatabase : RoomDatabase() {
@@ -48,6 +51,7 @@ abstract class CommunityDatabase : RoomDatabase() {
     abstract fun artDao(): ArtDao
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun bannedUserDao(): BannedUserDao
+    abstract fun communityUserDao(): CommunityUserDao
 
     companion object {
         fun build(context: Context): CommunityDatabase =

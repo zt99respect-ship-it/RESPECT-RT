@@ -1,5 +1,8 @@
 package com.respect.community.ui.screens
 
+import android.content.Context
+import android.net.Uri
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -17,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
@@ -28,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -44,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,109 +58,30 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.ClipEntity
-import com.respect.community.ui.components.GlassFilterChip
 import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.RespectImage
 import com.respect.community.ui.components.ScaleBounceButton
+import com.respect.community.ui.components.TelegraphImagePickerButton
 import com.respect.community.ui.theme.RespectPurpleBright
 import com.respect.community.ui.theme.RespectSurface
 import com.respect.community.ui.theme.TextMuted
 import com.respect.community.ui.theme.TextPrimary
 import com.respect.community.ui.theme.TextSecondary
 
-@Composable
-fun MediaScreen(
-    clips: List<ClipEntity>,
-    artworks: List<ArtEntity>,
-    isAdmin: Boolean,
-    onAddClip: (String, String, String, String) -> Unit,
-    onToggleClipLike: (ClipEntity) -> Unit,
-    onDeleteClip: (Long) -> Unit,
-    onAddArt: (String, String, String) -> Unit,
-    onToggleArtLike: (ArtEntity) -> Unit,
-    onDeleteArt: (Long) -> Unit
-) {
-    var activeTab by remember { mutableIntStateOf(0) } // 0: TikTok Clips, 1: Pinterest Art
-    var showAddClip by remember { mutableStateOf(false) }
-    var showAddArt by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 84.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GlassFilterChip("كليبات (${clips.size})", activeTab == 0, { activeTab = 0 })
-                GlassFilterChip("معرض الفن (${artworks.size})", activeTab == 1, { activeTab = 1 })
-            }
-
-            ScaleBounceButton(
-                onClick = { if (activeTab == 0) showAddClip = true else showAddArt = true }
-            ) {
-                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(if (activeTab == 0) "كليب" else "رسمة", fontSize = 12.sp)
-            }
-        }
-
-        if (activeTab == 0) {
-            ClipsVerticalFeed(
-                clips = clips,
-                isAdmin = isAdmin,
-                onToggleLike = onToggleClipLike,
-                onDelete = onDeleteClip,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            ArtPinterestGrid(
-                artworks = artworks,
-                isAdmin = isAdmin,
-                onToggleLike = onToggleArtLike,
-                onDelete = onDeleteArt,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-    }
-
-    if (showAddClip) {
-        AddClipDialog(
-            onDismiss = { showAddClip = false },
-            onAdd = { slug, name, title, url ->
-                onAddClip(slug, name, title, url)
-                showAddClip = false
-            }
-        )
-    }
-
-    if (showAddArt) {
-        AddArtDialog(
-            onDismiss = { showAddArt = false },
-            onAdd = { title, artist, url ->
-                onAddArt(title, artist, url)
-                showAddArt = false
-            }
-        )
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class, UnstableApi::class)
 @Composable
-private fun ClipsVerticalFeed(
+fun ClipsVerticalFeed(
     clips: List<ClipEntity>,
     isAdmin: Boolean,
     onToggleLike: (ClipEntity) -> Unit,
@@ -179,9 +100,25 @@ private fun ClipsVerticalFeed(
     var isMuted by remember { mutableStateOf(false) }
 
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_ONE
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(
+                buildUponParameters()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_FORCED)
+                    .build()
+            )
         }
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(10_000, 30_000, 1_000, 2_500)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
+        ExoPlayer.Builder(context)
+            .setTrackSelector(trackSelector)
+            .setLoadControl(loadControl)
+            .build().apply {
+                repeatMode = Player.REPEAT_MODE_ONE
+            }
     }
 
     DisposableEffect(Unit) {
@@ -217,6 +154,7 @@ private fun ClipsVerticalFeed(
                         PlayerView(ctx).apply {
                             player = exoPlayer
                             useController = false
+                            subtitleView?.visibility = View.GONE
                             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                             layoutParams = FrameLayout.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -234,7 +172,6 @@ private fun ClipsVerticalFeed(
                 )
             }
 
-            // Right/End side TikTok-style floating action stack
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -242,10 +179,7 @@ private fun ClipsVerticalFeed(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0x880A0416)
-                ) {
+                Surface(shape = CircleShape, color = Color(0x88090B10)) {
                     IconButton(onClick = { onToggleLike(clip) }) {
                         Icon(
                             imageVector = if (clip.isLikedByMe) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
@@ -256,7 +190,7 @@ private fun ClipsVerticalFeed(
                 }
                 Text("${clip.likesCount}", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
 
-                Surface(shape = CircleShape, color = Color(0x880A0416)) {
+                Surface(shape = CircleShape, color = Color(0x88090B10)) {
                     IconButton(onClick = { isMuted = !isMuted }) {
                         Icon(
                             imageVector = if (isMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
@@ -267,7 +201,7 @@ private fun ClipsVerticalFeed(
                 }
 
                 if (isAdmin) {
-                    Surface(shape = CircleShape, color = Color(0x880A0416)) {
+                    Surface(shape = CircleShape, color = Color(0x88090B10)) {
                         IconButton(onClick = { onDelete(clip.id) }) {
                             Icon(Icons.Rounded.DeleteOutline, contentDescription = "حذف", tint = Color(0xFFFCA5A5))
                         }
@@ -297,7 +231,7 @@ private fun ClipsVerticalFeed(
 }
 
 @Composable
-private fun ArtPinterestGrid(
+fun ArtPinterestGrid(
     artworks: List<ArtEntity>,
     isAdmin: Boolean,
     onToggleLike: (ArtEntity) -> Unit,
@@ -359,7 +293,7 @@ private fun ArtPinterestGrid(
 }
 
 @Composable
-private fun AddClipDialog(
+fun AddClipDialog(
     onDismiss: () -> Unit,
     onAdd: (String, String, String, String) -> Unit
 ) {
@@ -390,7 +324,8 @@ private fun AddClipDialog(
 }
 
 @Composable
-private fun AddArtDialog(
+fun AddArtDialog(
+    onUploadImage: suspend (Context, Uri) -> Result<String>,
     onDismiss: () -> Unit,
     onAdd: (String, String, String) -> Unit
 ) {
@@ -406,7 +341,12 @@ private fun AddArtDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان العمل الفني") }, singleLine = true)
                 OutlinedTextField(value = artist, onValueChange = { artist = it }, label = { Text("اسم الرسام") }, singleLine = true)
-                OutlinedTextField(value = imageUrl, onValueChange = { imageUrl = it }, label = { Text("رابط الصورة") }, singleLine = true)
+                TelegraphImagePickerButton(
+                    label = "رفع الرسمة عبر Telegraph",
+                    onUploadImage = onUploadImage,
+                    onUploadedUrl = { imageUrl = it }
+                )
+                OutlinedTextField(value = imageUrl, onValueChange = { imageUrl = it }, label = { Text("رابط الصورة (Telegraph / URL)") }, singleLine = true)
             }
         },
         confirmButton = {

@@ -10,6 +10,7 @@ import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.BannedUserEntity
 import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.ClipEntity
+import com.respect.community.data.local.entity.CommunityUserEntity
 import com.respect.community.data.local.entity.ScheduleEventEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.SuggestionEntity
@@ -191,4 +192,31 @@ interface BannedUserDao {
 
     @Query("DELETE FROM banned_users WHERE identifier = :identifier")
     suspend fun unban(identifier: String)
+}
+
+@Dao
+interface CommunityUserDao {
+    @Query("SELECT * FROM community_users ORDER BY role ASC, updatedAt DESC")
+    fun observeAll(): Flow<List<CommunityUserEntity>>
+
+    @Query("SELECT COUNT(*) FROM community_users")
+    suspend fun count(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(user: CommunityUserEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(users: List<CommunityUserEntity>)
+
+    @Query("UPDATE community_users SET role = :role, updatedAt = :updatedAt WHERE uid = :uid")
+    suspend fun updateRole(uid: String, role: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE community_users SET isMuted = :muted, mutedUntilMs = :untilMs, banReason = :reason, updatedAt = :updatedAt WHERE uid = :uid")
+    suspend fun updateMute(
+        uid: String,
+        muted: Boolean,
+        untilMs: Long,
+        reason: String,
+        updatedAt: Long = System.currentTimeMillis()
+    )
 }

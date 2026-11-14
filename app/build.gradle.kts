@@ -1,8 +1,18 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+}
+
+fun readFirebaseField(rootDir: File, key: String, fallback: String = ""): String {
+    val configFile = File(rootDir, "firebase-applet-config.json")
+    if (!configFile.exists()) return fallback
+    val content = configFile.readText()
+    val match = Regex(""""$key"\s*:\s*"([^"]*)"""").find(content)
+    return match?.groupValues?.getOrNull(1) ?: fallback
 }
 
 android {
@@ -14,7 +24,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -23,9 +33,17 @@ android {
 
         buildConfigField("String", "KICK_CLIENT_ID", "\"01M73WDEYD7WMR9TG5X63CTQ54\"")
         buildConfigField("String", "KICK_CLIENT_SECRET", "\"755f654101e5fe8ec563cd844931618e095924bdbb631b263191c9abb63779c4\"")
-        buildConfigField("String", "KICK_REDIRECT_URI", "\"respect://oauth/callback\"")
+        buildConfigField("String", "KICK_REDIRECT_URI", "\"https://docs.kick.com\"")
         buildConfigField("String", "ADMIN_EMAIL", "\"zt.99.respect@gmail.com\"")
         buildConfigField("String", "ADMIN_PASSWORD", "\"Slayer_rt\"")
+
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${readFirebaseField(rootDir, "projectId")}\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"${readFirebaseField(rootDir, "appId")}\"")
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${readFirebaseField(rootDir, "apiKey")}\"")
+        buildConfigField("String", "FIREBASE_AUTH_DOMAIN", "\"${readFirebaseField(rootDir, "authDomain")}\"")
+        buildConfigField("String", "FIREBASE_DATABASE_ID", "\"${readFirebaseField(rootDir, "firestoreDatabaseId")}\"")
+        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${readFirebaseField(rootDir, "storageBucket")}\"")
+        buildConfigField("String", "FIREBASE_SENDER_ID", "\"${readFirebaseField(rootDir, "messagingSenderId")}\"")
     }
 
     buildTypes {
@@ -67,6 +85,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("androidx.fragment:fragment-ktx:1.8.4")
 
     // Jetpack Compose
     implementation(platform("androidx.compose:compose-bom:2024.09.02"))
@@ -84,6 +103,12 @@ dependencies {
 
     // Haze Glassmorphism Blur
     implementation("dev.chrisbanes.haze:haze:1.1.1")
+
+    // Firebase (Auth, Firestore, Remote Config)
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-config-ktx")
 
     // Networking: Retrofit + OkHttp + Gson
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
@@ -111,8 +136,9 @@ dependencies {
     // Coil Image Loading
     implementation("io.coil-kt:coil-compose:2.7.0")
 
-    // Coroutines
+    // Coroutines & Play Services Await
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")

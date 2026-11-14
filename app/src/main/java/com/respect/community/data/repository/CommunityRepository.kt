@@ -1,9 +1,13 @@
 package com.respect.community.data.repository
 
+import android.content.Context
+import android.net.Uri
 import com.respect.community.BuildConfig
+import com.respect.community.auth.KickOAuthManager
 import com.respect.community.data.local.CommunityDatabase
 import com.respect.community.data.local.KickAuthSession
 import com.respect.community.data.local.NotificationPrefs
+import com.respect.community.data.local.RemoteSettingsState
 import com.respect.community.data.local.SessionManager
 import com.respect.community.data.local.UserProfileState
 import com.respect.community.data.local.entity.AnalysisEntity
@@ -11,16 +15,19 @@ import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.BannedUserEntity
 import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.ClipEntity
+import com.respect.community.data.local.entity.CommunityUserEntity
 import com.respect.community.data.local.entity.ScheduleEventEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.SuggestionEntity
 import com.respect.community.data.local.entity.TimelinePostEntity
 import com.respect.community.data.remote.ChatConnectionState
+import com.respect.community.data.remote.FirebaseManager
 import com.respect.community.data.remote.KickAuthApi
 import com.respect.community.data.remote.KickChatWebSocket
 import com.respect.community.data.remote.KickPublicApi
 import com.respect.community.data.remote.KickV2Api
 import com.respect.community.data.remote.SendChatRequest
+import com.respect.community.data.remote.TelegraphUploader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,7 +44,9 @@ class CommunityRepository(
     private val v2Api: KickV2Api,
     private val db: CommunityDatabase,
     private val sessionManager: SessionManager,
-    private val chatWebSocket: KickChatWebSocket
+    private val chatWebSocket: KickChatWebSocket,
+    private val firebaseManager: FirebaseManager,
+    private val telegraphUploader: TelegraphUploader
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val appTokenMutex = Mutex()
@@ -51,6 +60,7 @@ class CommunityRepository(
     private val artDao = db.artDao()
     private val chatDao = db.chatMessageDao()
     private val bannedDao = db.bannedUserDao()
+    private val userDao = db.communityUserDao()
 
     init {
         scope.launch {
@@ -61,6 +71,17 @@ class CommunityRepository(
         }
         scope.launch {
             ensureInitialCommunityContent()
+            firebaseManager.testConnection()
+            val remote = firebaseManager.fetchRemoteConfig()
+            sessionManager.saveRemoteSettings(remote)
+            firebaseManager.listenGlobalSettings { cloudSettings ->
+                scope.launch { sessionManager.saveRemoteSettings(cloudSettings) }
+            }
+            firebaseManager.listenUsers { cloudUsers ->
+                if (cloudUsers.isNotEmpty()) {
+                    scope.launch { userDao.upsertAll(cloudUsers) }
+                }
+            }
         }
     }
 
@@ -73,11 +94,15 @@ class CommunityRepository(
     val artFlow: Flow<List<ArtEntity>> = artDao.observeAll()
     val generalChatFlow: Flow<List<ChatMessageEntity>> = chatDao.observeRoom(GENERAL_CHAT_ROOM)
     val bannedUsersFlow: Flow<List<BannedUserEntity>> = bannedDao.observeAll()
+    val communityUsersFlow: Flow<List<CommunityUserEntity>> = userDao.observeAll()
 
     val userProfileFlow: Flow<UserProfileState> = sessionManager.userProfileFlow
     val kickAuthSessionFlow: Flow<KickAuthSession> = sessionManager.kickAuthSessionFlow
     val notificationPrefsFlow: Flow<NotificationPrefs> = sessionManager.notificationPrefsFlow
+    val remoteSettingsFlow: Flow<RemoteSettingsState> = sessionManager.remoteSettingsFlow
     val kickChatConnectionState: StateFlow<ChatConnectionState> = chatWebSocket.connectionState
+
+    suspend fun getRemoteSettingsOnce(): RemoteSettingsState = sessionManager.getRemoteSettingsOnce()
 
     fun observeStreamer(slug: String): Flow<StreamerEntity?> = streamerDao.observeBySlug(slug)
     fun observeKickChat(slug: String): Flow<List<ChatMessageEntity>> = chatDao.observeRoom("kick:$slug")
@@ -88,14 +113,27 @@ class CommunityRepository(
     fun searchArt(query: String): Flow<List<ArtEntity>> = artDao.search(query)
 
     private suspend fun ensureInitialCommunityContent() {
+        if (userDao.count() == 0) {
+            userDao.upsert(
+                CommunityUserEntity(
+                    uid = "admin_respect",
+                    displayName = "إدارة RESPECT",
+                    email = BuildConfig.ADMIN_EMAIL,
+                    bio = "الحساب الإداري الرسمي لمجتمع RESPECT",
+                    role = "ADMIN",
+                    isMuted = false
+                )
+            )
+        }
         if (timelineDao.count() == 0) {
             timelineDao.insert(
                 TimelinePostEntity(
+                    remoteId = "welcome_post_1",
                     authorName = "إدارة مجتمع RESPECT",
                     authorIdentifier = BuildConfig.ADMIN_EMAIL,
                     isAdminPost = true,
                     isOfficialAnnouncement = true,
-                    content = "أهلاً بكم في تطبيق مجتمع RESPECT الرسمي! تابع البثوث المباشرة على KICK، شارك في التايملاين وشات السوالف، واستمتع بالكليبات ومعرض الفن.",
+                    content = "أهلاً بكم في تطبيق مجتمع RESPECT! واجهة زجاجية حديثة، بثوث KICK مباشرة بدون تقطيع، ورفع صور عبر Telegraph.",
                     likesCount = 12
                 )
             )
@@ -148,7 +186,7 @@ class CommunityRepository(
             )
             artDao.insert(
                 ArtEntity(
-                    title = "شعار RESPECT النيوني",
+                    title = "شعار RESPECT",
                     artistName = "مصمم المجتمع",
                     imageUrl = "res://respect_logo",
                     aspectRatio = 0.85f,
@@ -161,13 +199,116 @@ class CommunityRepository(
                 ClipEntity(
                     streamerSlug = "respect",
                     streamerName = "أبرز لحظات المجتمع",
-                    title = "مقتطف تشويقي من فعاليات RESPECT (أضف رابط أي كليب MP4/HLS)",
+                    title = "مقتطف تشويقي من فعاليات RESPECT",
                     videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
                     likesCount = 15,
                     uploadedBy = "إدارة RESPECT"
                 )
             )
         }
+    }
+
+    // --- Telegraph Image Upload ---
+    suspend fun uploadImageToTelegraph(context: Context, uri: Uri): Result<String> =
+        telegraphUploader.uploadImage(context, uri)
+
+    // --- Firebase Auth & Remote Config ---
+    suspend fun signInFirebase(email: String, password: String): Result<UserProfileState> = runCatching {
+        val cleanEmail = email.trim()
+        require(cleanEmail.isNotBlank() && password.length >= 6) {
+            "أدخل البريد الإلكتروني وكلمة المرور (6 أحرف على الأقل)"
+        }
+        val isHardcodedAdmin =
+            cleanEmail.equals(BuildConfig.ADMIN_EMAIL, ignoreCase = true) &&
+                password == BuildConfig.ADMIN_PASSWORD
+
+        val firebaseResult = firebaseManager.signInWithEmail(cleanEmail, password)
+        val user = firebaseResult.getOrNull()
+
+        if (user != null) {
+            val isAdmin = isHardcodedAdmin || cleanEmail.equals(BuildConfig.ADMIN_EMAIL, ignoreCase = true)
+            sessionManager.setFirebaseUserSession(
+                uid = user.uid,
+                email = user.email ?: cleanEmail,
+                displayName = user.displayName ?: if (isAdmin) "إدارة RESPECT" else null,
+                isAdmin = isAdmin
+            )
+            val entity = CommunityUserEntity(
+                uid = user.uid,
+                displayName = user.displayName ?: sessionManager.getProfileOnce().displayName,
+                email = user.email ?: cleanEmail,
+                role = if (isAdmin) "ADMIN" else "USER"
+            )
+            userDao.upsert(entity)
+            firebaseManager.syncUserProfile(entity)
+            sessionManager.getProfileOnce()
+        } else if (isHardcodedAdmin) {
+            sessionManager.setAdminSession(isAdmin = true, email = BuildConfig.ADMIN_EMAIL)
+            sessionManager.getProfileOnce()
+        } else {
+            throw firebaseResult.exceptionOrNull() ?: IllegalStateException("تعذر تسجيل الدخول في Firebase")
+        }
+    }
+
+    suspend fun signUpFirebase(
+        email: String,
+        password: String,
+        displayName: String
+    ): Result<UserProfileState> = runCatching {
+        val cleanEmail = email.trim()
+        require(cleanEmail.isNotBlank() && password.length >= 6) {
+            "يرجى إدخال بريد إلكتروني صحيح وكلمة مرور من 6 أحرف على الأقل"
+        }
+        val name = displayName.trim().ifBlank { "عضو RESPECT" }
+        val user = firebaseManager.signUpWithEmail(cleanEmail, password, name).getOrThrow()
+        val isAdmin = cleanEmail.equals(BuildConfig.ADMIN_EMAIL, ignoreCase = true)
+        sessionManager.setFirebaseUserSession(
+            uid = user.uid,
+            email = user.email ?: cleanEmail,
+            displayName = name,
+            isAdmin = isAdmin
+        )
+        val entity = CommunityUserEntity(
+            uid = user.uid,
+            displayName = name,
+            email = user.email ?: cleanEmail,
+            role = if (isAdmin) "ADMIN" else "USER"
+        )
+        userDao.upsert(entity)
+        sessionManager.getProfileOnce()
+    }
+
+    suspend fun signOutFirebase() {
+        firebaseManager.signOut()
+        sessionManager.clearFirebaseSession()
+    }
+
+    suspend fun refreshRemoteConfig(): RemoteSettingsState {
+        val settings = firebaseManager.fetchRemoteConfig()
+        sessionManager.saveRemoteSettings(settings)
+        return settings
+    }
+
+    suspend fun saveGlobalSettings(settings: RemoteSettingsState) {
+        sessionManager.saveRemoteSettings(settings)
+        firebaseManager.saveGlobalSettings(settings)
+    }
+
+    // --- Admin User Management ---
+    suspend fun updateUserRole(uid: String, role: String) {
+        userDao.updateRole(uid, role)
+        firebaseManager.updateUserModeration(uid, role, isMuted = false, mutedUntilMs = 0L, banReason = "")
+    }
+
+    suspend fun muteCommunityUser(uid: String, displayName: String, mute: Boolean, reason: String) {
+        val until = if (mute) System.currentTimeMillis() + 24L * 60L * 60L * 1000L else 0L
+        userDao.updateMute(uid, mute, until, reason)
+        if (mute) {
+            banUserOneDay(uid, displayName, reason)
+        } else {
+            unbanUser(uid)
+        }
+        firebaseManager.updateUserModeration(uid, role = "USER", isMuted = mute, mutedUntilMs = until, banReason = reason)
     }
 
     // --- 1. KICK API & Streamer Directory ---
@@ -309,7 +450,7 @@ class CommunityRepository(
             val tokenResp = authApi.exchangeAuthCode(
                 clientId = BuildConfig.KICK_CLIENT_ID,
                 clientSecret = BuildConfig.KICK_CLIENT_SECRET,
-                redirectUri = BuildConfig.KICK_REDIRECT_URI,
+                redirectUri = KickOAuthManager.REDIRECT_URI,
                 code = code,
                 codeVerifier = verifier
             )
@@ -402,23 +543,32 @@ class CommunityRepository(
         isAnnouncement: Boolean
     ): Result<Unit> = runCatching {
         val profile = sessionManager.getProfileOnce()
+        val settings = sessionManager.getRemoteSettingsOnce()
+        if (!settings.allowGuestPosts && !profile.isFirebaseSignedIn && !profile.isAdmin) {
+            error("النشر حالياً متاح للأعضاء المسجلين فقط")
+        }
         checkNotBanned(profile)
         val trimmed = content.trim()
-        require(trimmed.isNotBlank() || mediaUrl.isNotBlank()) { "اكتب محتوى المنشور أو أرفق رابط وسائط" }
+        require(trimmed.isNotBlank() || mediaUrl.isNotBlank()) { "اكتب محتوى المنشور أو أرفق صورة" }
         val announcementAllowed = isAnnouncement && profile.isAdmin
+        val remoteId = "post_${UUID.randomUUID()}"
 
-        timelineDao.insert(
-            TimelinePostEntity(
-                authorName = profile.displayName,
-                authorIdentifier = profile.activeIdentifier,
-                authorAvatarUrl = profile.avatarUrl,
-                isAdminPost = profile.isAdmin,
-                isOfficialAnnouncement = announcementAllowed,
-                content = trimmed,
-                mediaUrl = mediaUrl.trim(),
-                mediaType = if (mediaUrl.isBlank()) "NONE" else mediaType
-            )
+        val post = TimelinePostEntity(
+            remoteId = remoteId,
+            authorName = profile.displayName,
+            authorIdentifier = profile.activeIdentifier,
+            authorAvatarUrl = profile.avatarUrl,
+            isAdminPost = profile.isAdmin,
+            isOfficialAnnouncement = announcementAllowed,
+            content = trimmed,
+            mediaUrl = mediaUrl.trim(),
+            mediaType = if (mediaUrl.isBlank()) "NONE" else mediaType
         )
+        timelineDao.insert(post)
+        val uid = firebaseManager.auth?.currentUser?.uid ?: profile.uid
+        if (uid.isNotBlank()) {
+            firebaseManager.publishTimelinePost(post, uid)
+        }
     }
 
     suspend fun togglePostLike(post: TimelinePostEntity) =
@@ -442,14 +592,15 @@ class CommunityRepository(
 
     private suspend fun checkNotBanned(profile: UserProfileState) {
         if (profile.isAdmin) return
-        val banByEmail = bannedDao.getActiveBan(profile.activeIdentifier)
+        val banById = bannedDao.getActiveBan(profile.activeIdentifier)
+        val banByEmail = bannedDao.getActiveBan(profile.email)
         val banByName = bannedDao.getActiveBan(profile.displayName)
-        val activeBan = banByEmail ?: banByName ?: return
+        val activeBan = banById ?: banByEmail ?: banByName ?: return
         val hoursLeft = ((activeBan.bannedUntilMs - System.currentTimeMillis()) / 3_600_000L).coerceAtLeast(1L)
         error("حسابك مقيد مؤقتاً لمدة $hoursLeft ساعة: ${activeBan.reason}")
     }
 
-    // --- 6. General Chat Room (شات السوالف) ---
+    // --- 6. General Chat Room ---
     suspend fun sendGeneralChatMessage(content: String): Result<Unit> = runCatching {
         val profile = sessionManager.getProfileOnce()
         checkNotBanned(profile)
@@ -495,7 +646,7 @@ class CommunityRepository(
 
     suspend fun deleteAnalysis(id: Long) = analysisDao.deleteById(id)
 
-    // --- 8. Clips (TikTok-style) ---
+    // --- 8. Clips ---
     suspend fun addClip(streamerSlug: String, streamerName: String, title: String, videoUrl: String): Result<Unit> =
         runCatching {
             val profile = sessionManager.getProfileOnce()
@@ -515,7 +666,7 @@ class CommunityRepository(
     suspend fun toggleClipLike(clip: ClipEntity) = clipDao.toggleLike(clip.id, !clip.isLikedByMe)
     suspend fun deleteClip(id: Long) = clipDao.deleteById(id)
 
-    // --- 9. Art Gallery (Pinterest-style) ---
+    // --- 9. Art Gallery ---
     suspend fun addArt(title: String, artistName: String, imageUrl: String): Result<Unit> = runCatching {
         val profile = sessionManager.getProfileOnce()
         checkNotBanned(profile)
@@ -534,14 +685,29 @@ class CommunityRepository(
     suspend fun deleteArt(id: Long) = artDao.deleteById(id)
 
     // --- 12. Profile & Admin Auth ---
-    suspend fun updateProfile(name: String, bio: String, avatarUrl: String) =
+    suspend fun updateProfile(name: String, bio: String, avatarUrl: String) {
         sessionManager.updateProfile(name, bio, avatarUrl)
+        val profile = sessionManager.getProfileOnce()
+        if (profile.uid.isNotBlank()) {
+            val entity = CommunityUserEntity(
+                uid = profile.uid,
+                displayName = profile.displayName,
+                email = profile.email,
+                avatarUrl = profile.avatarUrl,
+                bio = profile.bio,
+                role = if (profile.isAdmin) "ADMIN" else "USER"
+            )
+            userDao.upsert(entity)
+            firebaseManager.syncUserProfile(entity)
+        }
+    }
 
     suspend fun loginAdmin(email: String, password: String): Result<Unit> = runCatching {
         val validEmail = email.trim().equals(BuildConfig.ADMIN_EMAIL, ignoreCase = true)
         val validPass = password == BuildConfig.ADMIN_PASSWORD
         require(validEmail && validPass) { "بيانات دخول الإدارة غير صحيحة" }
         sessionManager.setAdminSession(isAdmin = true, email = BuildConfig.ADMIN_EMAIL)
+        runCatching { firebaseManager.signInWithEmail(BuildConfig.ADMIN_EMAIL, BuildConfig.ADMIN_PASSWORD) }
     }
 
     suspend fun logoutAdmin() = sessionManager.setAdminSession(isAdmin = false)

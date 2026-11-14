@@ -17,7 +17,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -30,9 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.LiveTv
-import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -71,16 +68,16 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.respect.community.service.StreamMonitorService
+import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.LocalRespectHazeState
 import com.respect.community.ui.components.RespectHazeContainer
 import com.respect.community.ui.components.respectGlassStyle
-import com.respect.community.ui.screens.MediaScreen
+import com.respect.community.ui.screens.CommunityHubScreen
 import com.respect.community.ui.screens.PlayerScreen
 import com.respect.community.ui.screens.ProfileAdminScreen
-import com.respect.community.ui.screens.SearchScreen
-import com.respect.community.ui.screens.SocialScreen
 import com.respect.community.ui.screens.StreamsScreen
-import com.respect.community.ui.theme.GlassBorder
+import com.respect.community.ui.theme.GlassHighlightBorder
+import com.respect.community.ui.theme.GoldAccent
 import com.respect.community.ui.theme.RespectCommunityTheme
 import com.respect.community.ui.theme.RespectPurple
 import com.respect.community.ui.theme.RespectPurpleBright
@@ -96,9 +93,7 @@ import kotlinx.coroutines.launch
 
 private sealed class CommunityTab(val route: String, val label: String, val icon: ImageVector) {
     data object Streams : CommunityTab("streams", "البثوث", Icons.Rounded.LiveTv)
-    data object Social : CommunityTab("social", "المجتمع", Icons.Rounded.Forum)
-    data object Media : CommunityTab("media", "المقاطع", Icons.Rounded.Movie)
-    data object Search : CommunityTab("search", "بحث", Icons.Rounded.Search)
+    data object Community : CommunityTab("community", "المجتمع", Icons.Rounded.Forum)
     data object Profile : CommunityTab("profile", "حسابي", Icons.Rounded.Person)
 }
 
@@ -191,11 +186,11 @@ private fun RespectCommunityRoot(
     val artworks by vm.artworks.collectAsStateWithLifecycle()
     val generalChat by vm.generalChat.collectAsStateWithLifecycle()
     val bannedUsers by vm.bannedUsers.collectAsStateWithLifecycle()
+    val communityUsers by vm.communityUsers.collectAsStateWithLifecycle()
     val userProfile by vm.userProfile.collectAsStateWithLifecycle()
     val kickSession by vm.kickAuthSession.collectAsStateWithLifecycle()
     val notifPrefs by vm.notificationPrefs.collectAsStateWithLifecycle()
-    val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
-    val searchResults by vm.searchResults.collectAsStateWithLifecycle()
+    val remoteSettings by vm.remoteSettings.collectAsStateWithLifecycle()
     val isBusy by vm.isBusy.collectAsStateWithLifecycle()
     val snackbarMsg by vm.snackbarMessage.collectAsStateWithLifecycle()
 
@@ -205,7 +200,7 @@ private fun RespectCommunityRoot(
 
     var showSplash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        delay(950L)
+        delay(850L)
         showSplash = false
     }
 
@@ -233,9 +228,7 @@ private fun RespectCommunityRoot(
 
     val tabs = listOf(
         CommunityTab.Streams,
-        CommunityTab.Social,
-        CommunityTab.Media,
-        CommunityTab.Search,
+        CommunityTab.Community,
         CommunityTab.Profile
     )
     val showBottomNav = currentRoute != null && !currentRoute.startsWith("player/")
@@ -248,13 +241,14 @@ private fun RespectCommunityRoot(
                     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                     bottomBar = {
                         if (showBottomNav) {
-                            val navShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                            val navShape = RoundedCornerShape(24.dp)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
                                     .clip(navShape)
-                                    .hazeChild(state = hazeState, style = respectGlassStyle(true))
-                                    .border(BorderStroke(1.dp, GlassBorder), navShape)
+                                    .hazeChild(state = hazeState, style = respectGlassStyle(false))
+                                    .border(BorderStroke(1.dp, GlassHighlightBorder.copy(alpha = 0.2f)), navShape)
                             ) {
                                 NavigationBar(
                                     containerColor = Color.Transparent,
@@ -272,11 +266,11 @@ private fun RespectCommunityRoot(
                                                 }
                                             },
                                             icon = { Icon(tab.icon, contentDescription = tab.label) },
-                                            label = { Text(tab.label, fontSize = 11.sp) },
+                                            label = { Text(tab.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = TextPrimary,
-                                                selectedTextColor = RespectPurpleBright,
-                                                indicatorColor = RespectPurple.copy(alpha = 0.30f),
+                                                selectedTextColor = TextPrimary,
+                                                indicatorColor = RespectPurple.copy(alpha = 0.25f),
                                                 unselectedIconColor = TextMuted,
                                                 unselectedTextColor = TextMuted
                                             )
@@ -292,131 +286,143 @@ private fun RespectCommunityRoot(
                             .fillMaxSize()
                             .padding(top = innerPadding.calculateTopPadding())
                     ) {
-                        NavHost(
-                            navController = navController,
-                            startDestination = CommunityTab.Streams.route
-                        ) {
-                            composable(CommunityTab.Streams.route) {
-                                StreamsScreen(
-                                    streamers = streamers,
-                                    scheduleEvents = scheduleEvents,
-                                    isAdmin = userProfile.isAdmin,
-                                    isBusy = isBusy,
-                                    onAddStreamer = vm::addStreamer,
-                                    onRefreshAll = { vm.refreshAllStreamers(silent = false) },
-                                    onToggleFavorite = vm::toggleFavorite,
-                                    onToggleFollow = vm::toggleFollow,
-                                    onRemoveStreamer = vm::removeStreamer,
-                                    onWatchStreamer = { slug -> navController.navigate("player/$slug") },
-                                    onSubmitSuggestion = vm::submitSuggestion,
-                                    onSaveSchedule = vm::saveScheduleEvent,
-                                    onDeleteSchedule = vm::deleteScheduleEvent
-                                )
+                        if (remoteSettings.maintenanceMode && !userProfile.isAdmin && currentRoute != CommunityTab.Profile.route) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                HazeGlassCard(isGlowing = true) {
+                                    Text("وضع الصيانة مفعل", color = GoldAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        "يعمل فريق RESPECT حالياً على تحديث المنصة. يمكنك الدخول لحساب الإدارة من تبويب حسابي.",
+                                        color = TextPrimary
+                                    )
+                                }
                             }
+                        } else {
+                            NavHost(
+                                navController = navController,
+                                startDestination = CommunityTab.Streams.route
+                            ) {
+                                composable(CommunityTab.Streams.route) {
+                                    StreamsScreen(
+                                        streamers = streamers,
+                                        scheduleEvents = scheduleEvents,
+                                        bannerText = remoteSettings.bannerText,
+                                        isAdmin = userProfile.isAdmin,
+                                        isBusy = isBusy,
+                                        onAddStreamer = vm::addStreamer,
+                                        onRefreshAll = { vm.refreshAllStreamers(silent = false) },
+                                        onToggleFavorite = vm::toggleFavorite,
+                                        onToggleFollow = vm::toggleFollow,
+                                        onRemoveStreamer = vm::removeStreamer,
+                                        onWatchStreamer = { slug -> navController.navigate("player/$slug") },
+                                        onSubmitSuggestion = vm::submitSuggestion,
+                                        onSaveSchedule = vm::saveScheduleEvent,
+                                        onDeleteSchedule = vm::deleteScheduleEvent
+                                    )
+                                }
 
-                            composable(CommunityTab.Social.route) {
-                                SocialScreen(
-                                    timelinePosts = timelinePosts,
-                                    generalChat = generalChat,
-                                    analyses = analyses,
-                                    isAdmin = userProfile.isAdmin,
-                                    onCreatePost = vm::createTimelinePost,
-                                    onTogglePostLike = vm::togglePostLike,
-                                    onDeletePost = vm::deleteTimelinePost,
-                                    onBanUserOneDay = vm::banUserOneDay,
-                                    onSendGeneralChat = vm::sendGeneralChat,
-                                    onDeleteChatMessage = vm::deleteChatMessage,
-                                    onAddAnalysis = vm::addAnalysis,
-                                    onDeleteAnalysis = vm::deleteAnalysis
-                                )
-                            }
+                                composable(CommunityTab.Community.route) {
+                                    CommunityHubScreen(
+                                        timelinePosts = timelinePosts,
+                                        generalChat = generalChat,
+                                        analyses = analyses,
+                                        clips = clips,
+                                        artworks = artworks,
+                                        isAdmin = userProfile.isAdmin,
+                                        onUploadImage = vm::uploadImageToTelegraph,
+                                        onCreatePost = vm::createTimelinePost,
+                                        onTogglePostLike = vm::togglePostLike,
+                                        onDeletePost = vm::deleteTimelinePost,
+                                        onBanUserOneDay = vm::banUserOneDay,
+                                        onSendGeneralChat = vm::sendGeneralChat,
+                                        onDeleteChatMessage = vm::deleteChatMessage,
+                                        onAddAnalysis = vm::addAnalysis,
+                                        onDeleteAnalysis = vm::deleteAnalysis,
+                                        onAddClip = vm::addClip,
+                                        onToggleClipLike = vm::toggleClipLike,
+                                        onDeleteClip = vm::deleteClip,
+                                        onAddArt = vm::addArt,
+                                        onToggleArtLike = vm::toggleArtLike,
+                                        onDeleteArt = vm::deleteArt
+                                    )
+                                }
 
-                            composable(CommunityTab.Media.route) {
-                                MediaScreen(
-                                    clips = clips,
-                                    artworks = artworks,
-                                    isAdmin = userProfile.isAdmin,
-                                    onAddClip = vm::addClip,
-                                    onToggleClipLike = vm::toggleClipLike,
-                                    onDeleteClip = vm::deleteClip,
-                                    onAddArt = vm::addArt,
-                                    onToggleArtLike = vm::toggleArtLike,
-                                    onDeleteArt = vm::deleteArt
-                                )
-                            }
+                                composable(CommunityTab.Profile.route) {
+                                    ProfileAdminScreen(
+                                        profile = userProfile,
+                                        kickSession = kickSession,
+                                        notificationPrefs = notifPrefs,
+                                        remoteSettings = remoteSettings,
+                                        communityUsers = communityUsers,
+                                        streamers = streamers,
+                                        suggestions = suggestions,
+                                        scheduleEvents = scheduleEvents,
+                                        timelinePosts = timelinePosts,
+                                        clips = clips,
+                                        artworks = artworks,
+                                        bannedUsers = bannedUsers,
+                                        onUploadImage = vm::uploadImageToTelegraph,
+                                        onUpdateProfile = vm::updateProfile,
+                                        onFirebaseSignIn = vm::signInFirebase,
+                                        onFirebaseSignUp = vm::signUpFirebase,
+                                        onFirebaseSignOut = vm::signOutFirebase,
+                                        onKickOAuthLogin = { vm.launchKickOAuth(activityContext) },
+                                        onKickLogout = vm::logoutKick,
+                                        onMonitoringChanged = { enabled -> vm.setMonitoring(app, enabled) },
+                                        onSoundChanged = vm::setSound,
+                                        onVibrationChanged = vm::setVibration,
+                                        onFavoritesOnlyChanged = vm::setFavoritesOnly,
+                                        onAdminLogin = vm::loginAdmin,
+                                        onAdminLogout = vm::logoutAdmin,
+                                        onUpdateUserRole = vm::updateUserRole,
+                                        onMuteCommunityUser = vm::muteCommunityUser,
+                                        onAddStreamer = vm::addStreamer,
+                                        onRemoveStreamer = vm::removeStreamer,
+                                        onApproveSuggestion = vm::approveSuggestion,
+                                        onRejectSuggestion = vm::rejectSuggestion,
+                                        onDeleteSuggestion = vm::deleteSuggestion,
+                                        onSaveSchedule = vm::saveScheduleEvent,
+                                        onDeleteSchedule = vm::deleteScheduleEvent,
+                                        onDeletePost = vm::deleteTimelinePost,
+                                        onBanUserOneDay = vm::banUserOneDay,
+                                        onUnbanUser = vm::unbanUser,
+                                        onDeleteClip = vm::deleteClip,
+                                        onDeleteArt = vm::deleteArt,
+                                        onSaveGlobalSettings = vm::saveGlobalSettings,
+                                        onRefreshRemoteConfig = vm::refreshRemoteConfig
+                                    )
+                                }
 
-                            composable(CommunityTab.Search.route) {
-                                SearchScreen(
-                                    query = searchQuery,
-                                    results = searchResults,
-                                    onQueryChange = vm::updateSearchQuery,
-                                    onWatchStreamer = { slug -> navController.navigate("player/$slug") },
-                                    onNavigateToSocial = { navController.navigate(CommunityTab.Social.route) },
-                                    onNavigateToMedia = { navController.navigate(CommunityTab.Media.route) }
-                                )
-                            }
-
-                            composable(CommunityTab.Profile.route) {
-                                ProfileAdminScreen(
-                                    profile = userProfile,
-                                    kickSession = kickSession,
-                                    notificationPrefs = notifPrefs,
-                                    streamers = streamers,
-                                    suggestions = suggestions,
-                                    scheduleEvents = scheduleEvents,
-                                    timelinePosts = timelinePosts,
-                                    clips = clips,
-                                    artworks = artworks,
-                                    bannedUsers = bannedUsers,
-                                    onUpdateProfile = vm::updateProfile,
-                                    onKickOAuthLogin = { vm.launchKickOAuth(activityContext) },
-                                    onKickLogout = vm::logoutKick,
-                                    onMonitoringChanged = { enabled -> vm.setMonitoring(app, enabled) },
-                                    onSoundChanged = vm::setSound,
-                                    onVibrationChanged = vm::setVibration,
-                                    onFavoritesOnlyChanged = vm::setFavoritesOnly,
-                                    onAdminLogin = vm::loginAdmin,
-                                    onAdminLogout = vm::logoutAdmin,
-                                    onAddStreamer = vm::addStreamer,
-                                    onRemoveStreamer = vm::removeStreamer,
-                                    onApproveSuggestion = vm::approveSuggestion,
-                                    onRejectSuggestion = vm::rejectSuggestion,
-                                    onDeleteSuggestion = vm::deleteSuggestion,
-                                    onSaveSchedule = vm::saveScheduleEvent,
-                                    onDeleteSchedule = vm::deleteScheduleEvent,
-                                    onDeletePost = vm::deleteTimelinePost,
-                                    onBanUserOneDay = vm::banUserOneDay,
-                                    onUnbanUser = vm::unbanUser,
-                                    onDeleteClip = vm::deleteClip,
-                                    onDeleteArt = vm::deleteArt
-                                )
-                            }
-
-                            composable(
-                                route = "player/{slug}",
-                                arguments = listOf(navArgument("slug") { type = NavType.StringType })
-                            ) { entry ->
-                                val slug = entry.arguments?.getString("slug").orEmpty()
-                                val playerVm: PlayerViewModel = viewModel(
-                                    key = "player_$slug",
-                                    factory = PlayerViewModel.Factory(app, slug, app.container.repository)
-                                )
-                                PlayerScreen(
-                                    viewModel = playerVm,
-                                    onBack = { navController.popBackStack() },
-                                    onRequestKickLogin = { vm.launchKickOAuth(activityContext) }
-                                )
+                                composable(
+                                    route = "player/{slug}",
+                                    arguments = listOf(navArgument("slug") { type = NavType.StringType })
+                                ) { entry ->
+                                    val slug = entry.arguments?.getString("slug").orEmpty()
+                                    val playerVm: PlayerViewModel = viewModel(
+                                        key = "player_$slug",
+                                        factory = PlayerViewModel.Factory(app, slug, app.container.repository)
+                                    )
+                                    PlayerScreen(
+                                        viewModel = playerVm,
+                                        onBack = { navController.popBackStack() },
+                                        onRequestKickLogin = { vm.launchKickOAuth(activityContext) }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Branded RESPECT Splash Overlay
             AnimatedVisibility(
                 visible = showSplash,
                 enter = fadeIn(),
-                exit = fadeOut(animationSpec = tween(450))
+                exit = fadeOut(animationSpec = tween(400))
             ) {
                 Box(
                     modifier = Modifier
@@ -429,12 +435,12 @@ private fun RespectCommunityRoot(
                             painter = painterResource(id = R.drawable.respect_logo),
                             contentDescription = "RESPECT",
                             modifier = Modifier
-                                .size(110.dp)
-                                .clip(RoundedCornerShape(26.dp))
+                                .size(104.dp)
+                                .clip(RoundedCornerShape(24.dp))
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        Text("RESPECT COMMUNITY", color = TextPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                        Text("مجتمع ريسبكت الرسمي", color = RespectPurpleBright, fontSize = 14.sp)
+                        Text("RESPECT COMMUNITY", color = TextPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 21.sp)
+                        Text("مجتمع ريسبكت الرسمي", color = RespectPurpleBright, fontSize = 13.sp)
                     }
                 }
             }

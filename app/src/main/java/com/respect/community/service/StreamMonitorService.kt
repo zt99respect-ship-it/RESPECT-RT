@@ -73,6 +73,9 @@ class StreamMonitorService : Service() {
                         break
                     }
 
+                    val remoteSettings = repository.getRemoteSettingsOnce()
+                    val pollMs = remoteSettings.pollIntervalSeconds.coerceIn(10, 120) * 1000L
+
                     val newlyLive = repository.refreshAllStreamers()
                     val allTracked = app.container.database.streamerDao().getAllOnce()
                     val liveCount = allTracked.count { it.isLive }
@@ -86,9 +89,10 @@ class StreamMonitorService : Service() {
                             sendLiveNotification(streamer, prefs)
                         }
                     }
+                    delay(pollMs)
                 } catch (_: Exception) {
+                    delay(POLL_INTERVAL_MS)
                 }
-                delay(POLL_INTERVAL_MS)
             }
         }
     }

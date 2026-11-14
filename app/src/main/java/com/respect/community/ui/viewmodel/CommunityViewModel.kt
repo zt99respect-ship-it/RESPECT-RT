@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.respect.community.auth.KickOAuthManager
 import com.respect.community.data.local.KickAuthSession
 import com.respect.community.data.local.NotificationPrefs
+import com.respect.community.data.local.RemoteSettingsState
 import com.respect.community.data.local.SessionManager
 import com.respect.community.data.local.UserProfileState
 import com.respect.community.data.local.entity.AnalysisEntity
@@ -15,6 +16,7 @@ import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.BannedUserEntity
 import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.ClipEntity
+import com.respect.community.data.local.entity.CommunityUserEntity
 import com.respect.community.data.local.entity.ScheduleEventEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.data.local.entity.SuggestionEntity
@@ -72,6 +74,9 @@ class CommunityViewModel(
     val bannedUsers: StateFlow<List<BannedUserEntity>> = repository.bannedUsersFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val communityUsers: StateFlow<List<CommunityUserEntity>> = repository.communityUsersFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val userProfile: StateFlow<UserProfileState> = repository.userProfileFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfileState())
 
@@ -80,6 +85,9 @@ class CommunityViewModel(
 
     val notificationPrefs: StateFlow<NotificationPrefs> = repository.notificationPrefsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationPrefs())
+
+    val remoteSettings: StateFlow<RemoteSettingsState> = repository.remoteSettingsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), RemoteSettingsState())
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -118,6 +126,72 @@ class CommunityViewModel(
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    // --- Telegraph Image Uploader ---
+    suspend fun uploadImageToTelegraph(context: Context, uri: Uri): Result<String> {
+        val result = repository.uploadImageToTelegraph(context, uri)
+        result.onFailure { _snackbarMessage.value = it.message ?: "فشل رفع الصورة إلى Telegraph" }
+        result.onSuccess { _snackbarMessage.value = "تم رفع الصورة عبر Telegraph بنجاح" }
+        return result
+    }
+
+    // --- Firebase Auth & Settings ---
+    fun signInFirebase(email: String, password: String) {
+        viewModelScope.launch {
+            _isBusy.value = true
+            repository.signInFirebase(email, password)
+                .onSuccess { _snackbarMessage.value = "تم تسجيل الدخول بنجاح (${it.displayName})" }
+                .onFailure { _snackbarMessage.value = it.message ?: "فشل تسجيل الدخول" }
+            _isBusy.value = false
+        }
+    }
+
+    fun signUpFirebase(email: String, password: String, displayName: String) {
+        viewModelScope.launch {
+            _isBusy.value = true
+            repository.signUpFirebase(email, password, displayName)
+                .onSuccess { _snackbarMessage.value = "تم إنشاء الحساب بنجاح!" }
+                .onFailure { _snackbarMessage.value = it.message ?: "تعذر إنشاء الحساب" }
+            _isBusy.value = false
+        }
+    }
+
+    fun signOutFirebase() {
+        viewModelScope.launch {
+            repository.signOutFirebase()
+            _snackbarMessage.value = "تم تسجيل الخروج"
+        }
+    }
+
+    fun refreshRemoteConfig() {
+        viewModelScope.launch {
+            _isBusy.value = true
+            repository.refreshRemoteConfig()
+            _snackbarMessage.value = "تم تحديث إعدادات Remote Config"
+            _isBusy.value = false
+        }
+    }
+
+    fun saveGlobalSettings(settings: RemoteSettingsState) {
+        viewModelScope.launch {
+            repository.saveGlobalSettings(settings)
+            _snackbarMessage.value = "تم حفظ الإعدادات العامة في Firestore"
+        }
+    }
+
+    fun updateUserRole(uid: String, role: String) {
+        viewModelScope.launch {
+            repository.updateUserRole(uid, role)
+            _snackbarMessage.value = "تم تحديث صلاحية العضو إلى $role"
+        }
+    }
+
+    fun muteCommunityUser(uid: String, displayName: String, mute: Boolean, reason: String) {
+        viewModelScope.launch {
+            repository.muteCommunityUser(uid, displayName, mute, reason)
+            _snackbarMessage.value = if (mute) "تم تقييد $displayName لمدة يوم" else "تم فك التقييد عن $displayName"
+        }
     }
 
     // --- Streamers & Suggestions ---

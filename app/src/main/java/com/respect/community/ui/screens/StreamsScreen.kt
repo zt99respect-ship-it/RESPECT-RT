@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.TipsAndUpdates
@@ -95,6 +97,7 @@ import com.respect.community.ui.theme.TextSecondary
 fun StreamsScreen(
     streamers: List<StreamerEntity>,
     scheduleEvents: List<ScheduleEventEntity>,
+    bannerText: String,
     isAdmin: Boolean,
     isBusy: Boolean,
     onAddStreamer: (String, String) -> Unit,
@@ -119,22 +122,34 @@ fun StreamsScreen(
         }
     }
 
-    var selectedSubTab by remember { mutableIntStateOf(0) } // 0: Directory, 1: Schedule
+    var selectedSubTab by remember { mutableIntStateOf(0) } // 0: All, 1: Live only, 2: Schedule
+    var searchFilter by remember { mutableStateOf("") }
     var addSlugInput by remember { mutableStateOf("") }
     var showSuggestDialog by remember { mutableStateOf(false) }
     var editingSchedule by remember { mutableStateOf<ScheduleEventEntity?>(null) }
     var showAddScheduleDialog by remember { mutableStateOf(false) }
 
     val liveCount = streamers.count { it.isLive }
+    val filteredStreamers = remember(streamers, searchFilter, selectedSubTab) {
+        streamers.filter { s ->
+            val matchesTab = selectedSubTab != 1 || s.isLive
+            val q = searchFilter.trim()
+            val matchesQuery = q.isBlank() ||
+                s.displayName.contains(q, ignoreCase = true) ||
+                s.slug.contains(q, ignoreCase = true) ||
+                s.characterNames.contains(q, ignoreCase = true)
+            matchesTab && matchesQuery
+        }
+    }
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            HazeGlassCard(isGlowing = true, cornerRadius = 26.dp) {
+            HazeGlassCard(isGlowing = false, cornerRadius = 24.dp) {
                 Box(modifier = Modifier.fillMaxWidth()) {
                     Image(
                         painter = painterResource(id = R.drawable.respect_banner),
@@ -143,8 +158,8 @@ fun StreamsScreen(
                         modifier = Modifier
                             .matchParentSize()
                             .graphicsLayer { translationY = parallaxOffset }
-                            .clip(RoundedCornerShape(18.dp))
-                            .alpha(0.24f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .alpha(0.16f)
                     )
 
                     Row(
@@ -162,21 +177,21 @@ fun StreamsScreen(
                                 painter = painterResource(id = R.drawable.respect_logo),
                                 contentDescription = "RESPECT",
                                 modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(13.dp))
                             )
                             Column {
                                 Text("مجتمع RESPECT", style = MaterialTheme.typography.headlineMedium)
                                 Text(
-                                    "دليل الستريمرز وجدول البثوث",
+                                    "متابعة بثوث KICK والجدول",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = RespectPurpleBright
+                                    color = TextSecondary
                                 )
                             }
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(11.dp),
                             color = KickEmerald.copy(alpha = 0.16f),
                             border = BorderStroke(1.dp, KickEmerald.copy(alpha = 0.5f))
                         ) {
@@ -193,23 +208,27 @@ fun StreamsScreen(
             }
         }
 
+        if (bannerText.isNotBlank()) {
+            item {
+                HazeGlassCard(isGlowing = true, cornerRadius = 16.dp, contentPadding = PaddingValues(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Rounded.Campaign, contentDescription = null, tint = RespectPurpleBright, modifier = Modifier.size(18.dp))
+                        Text(bannerText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                    }
+                }
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GlassFilterChip(
-                        label = "الستريمرز (${streamers.size})",
-                        selected = selectedSubTab == 0,
-                        onClick = { selectedSubTab = 0 }
-                    )
-                    GlassFilterChip(
-                        label = "جدول البثوث (${scheduleEvents.size})",
-                        selected = selectedSubTab == 1,
-                        onClick = { selectedSubTab = 1 }
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GlassFilterChip("الكل (${streamers.size})", selectedSubTab == 0, { selectedSubTab = 0 })
+                    GlassFilterChip("مباشر ($liveCount)", selectedSubTab == 1, { selectedSubTab = 1 })
+                    GlassFilterChip("الجدول (${scheduleEvents.size})", selectedSubTab == 2, { selectedSubTab = 2 })
                 }
 
                 IconButton(onClick = onRefreshAll, enabled = !isBusy) {
@@ -226,9 +245,27 @@ fun StreamsScreen(
             }
         }
 
-        if (selectedSubTab == 0) {
+        if (selectedSubTab != 2) {
             item {
-                HazeGlassCard(cornerRadius = 22.dp) {
+                HazeGlassCard(cornerRadius = 20.dp, contentPadding = PaddingValues(14.dp)) {
+                    OutlinedTextField(
+                        value = searchFilter,
+                        onValueChange = { searchFilter = it },
+                        placeholder = { Text("ابحث باسم الستريمر أو الشخصية...", color = TextMuted) },
+                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = TextSecondary) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(13.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = RespectPurpleBright,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -237,7 +274,7 @@ fun StreamsScreen(
                         OutlinedTextField(
                             value = addSlugInput,
                             onValueChange = { addSlugInput = it },
-                            placeholder = { Text("أضف قناة KICK مباشرة (مثال: xqc)", color = TextMuted) },
+                            placeholder = { Text("أضف قناة KICK (مثال: xqc)", color = TextMuted) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = {
@@ -246,7 +283,7 @@ fun StreamsScreen(
                                     addSlugInput = ""
                                 }
                             }),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(13.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = RespectPurpleBright,
                                 unfocusedBorderColor = GlassBorder,
@@ -270,12 +307,12 @@ fun StreamsScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedButton(
                         onClick = { showSuggestDialog = true },
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, RespectPurpleBright.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(13.dp),
+                        border = BorderStroke(1.dp, GlassBorder),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Rounded.TipsAndUpdates, contentDescription = null, tint = RespectPurpleBright)
@@ -285,7 +322,7 @@ fun StreamsScreen(
                 }
             }
 
-            if (streamers.isEmpty()) {
+            if (filteredStreamers.isEmpty()) {
                 item {
                     HazeGlassCard {
                         Column(
@@ -298,14 +335,14 @@ fun StreamsScreen(
                                 painter = painterResource(id = R.drawable.respect_logo),
                                 contentDescription = null,
                                 modifier = Modifier
-                                    .size(56.dp)
-                                    .alpha(0.7f)
+                                    .size(52.dp)
+                                    .alpha(0.75f)
                             )
                             Spacer(modifier = Modifier.height(10.dp))
-                            Text("لا يوجد ستريمرز مضافون حالياً", style = MaterialTheme.typography.titleMedium)
+                            Text("لا يوجد ستريمرز مطابقون", style = MaterialTheme.typography.titleMedium)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "أضف اسم قناة KICK بالأعلى أو أرسل اقتراحاً للإدارة",
+                                "أضف اسم قناة KICK بالأعلى أو عدّل البحث",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextMuted
                             )
@@ -313,7 +350,7 @@ fun StreamsScreen(
                     }
                 }
             } else {
-                items(streamers, key = { it.slug }) { streamer ->
+                items(filteredStreamers, key = { it.slug }) { streamer ->
                     HazeGlassCard(
                         isGlowing = streamer.isLive,
                         onClick = { onWatchStreamer(streamer.slug) }
@@ -326,11 +363,11 @@ fun StreamsScreen(
                                 url = streamer.avatarUrl,
                                 contentDescription = streamer.displayName,
                                 modifier = Modifier
-                                    .size(56.dp)
+                                    .size(54.dp)
                                     .clip(CircleShape)
                                     .border(
                                         2.dp,
-                                        if (streamer.isLive) RespectPurpleBright else GlassBorder,
+                                        if (streamer.isLive) KickEmerald else GlassBorder,
                                         CircleShape
                                     )
                             )
@@ -350,13 +387,13 @@ fun StreamsScreen(
                                 }
                                 Text(
                                     text = "@${streamer.slug} • ${streamer.categoryName}",
-                                    color = RespectPurpleBright,
+                                    color = TextSecondary,
                                     fontSize = 12.sp
                                 )
                                 if (streamer.characterNames.isNotBlank()) {
                                     Text(
                                         text = "الشخصيات: ${streamer.characterNames}",
-                                        color = TextSecondary,
+                                        color = TextMuted,
                                         fontSize = 12.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -403,7 +440,7 @@ fun StreamsScreen(
                                 Icon(
                                     Icons.Rounded.Visibility,
                                     contentDescription = null,
-                                    tint = if (streamer.isLive) RespectPurpleBright else TextMuted,
+                                    tint = if (streamer.isLive) KickEmerald else TextMuted,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
@@ -455,7 +492,6 @@ fun StreamsScreen(
                 }
             }
         } else {
-            // Schedule & Predictions Tab
             if (isAdmin) {
                 item {
                     ScaleBounceButton(
@@ -470,7 +506,7 @@ fun StreamsScreen(
             }
 
             items(scheduleEvents, key = { it.id }) { event ->
-                HazeGlassCard(isGlowing = true) {
+                HazeGlassCard {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -513,7 +549,7 @@ fun StreamsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = RespectPurple.copy(alpha = 0.18f),
+                            color = RespectSurface.copy(alpha = 0.7f),
                             border = BorderStroke(1.dp, GlassBorder)
                         ) {
                             Text(

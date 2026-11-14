@@ -1,5 +1,7 @@
 package com.respect.community.ui.screens
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +23,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.DeleteOutline
@@ -45,7 +46,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,6 +65,7 @@ import com.respect.community.ui.components.GlassFilterChip
 import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.RespectImage
 import com.respect.community.ui.components.ScaleBounceButton
+import com.respect.community.ui.components.TelegraphImagePickerButton
 import com.respect.community.ui.theme.CyanAccent
 import com.respect.community.ui.theme.GoldAccent
 import com.respect.community.ui.theme.RespectPurple
@@ -76,273 +77,213 @@ import com.respect.community.ui.theme.TextSecondary
 import kotlin.math.roundToInt
 
 @Composable
-fun SocialScreen(
-    timelinePosts: List<TimelinePostEntity>,
-    generalChat: List<ChatMessageEntity>,
-    analyses: List<AnalysisEntity>,
+fun TimelineFeedContent(
+    posts: List<TimelinePostEntity>,
     isAdmin: Boolean,
-    onCreatePost: (String, String, String, Boolean) -> Unit,
     onTogglePostLike: (TimelinePostEntity) -> Unit,
     onDeletePost: (Long) -> Unit,
-    onBanUserOneDay: (String, String, String) -> Unit,
-    onSendGeneralChat: (String) -> Unit,
-    onDeleteChatMessage: (String) -> Unit,
-    onAddAnalysis: (String, String, String, String, Int) -> Unit,
-    onDeleteAnalysis: (Long) -> Unit
+    onBanUserOneDay: (String, String, String) -> Unit
 ) {
-    var activeTab by remember { mutableIntStateOf(0) } // 0: Timeline, 1: General Chat, 2: Stream Analysis
-    var showComposePost by remember { mutableStateOf(false) }
-    var showAddAnalysis by remember { mutableStateOf(false) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(posts, key = { it.id }) { post ->
+            TimelinePostCard(
+                post = post,
+                isAdmin = isAdmin,
+                onLike = { onTogglePostLike(post) },
+                onDelete = { onDeletePost(post.id) },
+                onBanOneDay = {
+                    onBanUserOneDay(
+                        post.authorIdentifier,
+                        post.authorName,
+                        "تقييد من الإدارة على منشور التايملاين"
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun GeneralChatContent(
+    messages: List<ChatMessageEntity>,
+    isAdmin: Boolean,
+    onSendGeneralChat: (String) -> Unit,
+    onDeleteChatMessage: (String) -> Unit
+) {
     var chatInput by remember { mutableStateOf("") }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 86.dp)
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("مجتمع التفاعل", style = MaterialTheme.typography.headlineMedium)
-                if (activeTab == 0) {
-                    ScaleBounceButton(onClick = { showComposePost = true }) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("نشر", fontSize = 13.sp)
-                    }
-                } else if (activeTab == 2) {
-                    ScaleBounceButton(onClick = { showAddAnalysis = true }) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("تحليل", fontSize = 13.sp)
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            reverseLayout = true,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(messages, key = { it.id }) { msg ->
+                val nameColor = remember(msg.senderColor) {
+                    try {
+                        Color(android.graphics.Color.parseColor(msg.senderColor))
+                    } catch (_: Exception) {
+                        RespectPurpleBright
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GlassFilterChip("التايملاين", activeTab == 0, { activeTab = 0 })
-                GlassFilterChip("شات السوالف", activeTab == 1, { activeTab = 1 })
-                GlassFilterChip("تحليل البث", activeTab == 2, { activeTab = 2 })
-            }
-        }
-
-        when (activeTab) {
-            0 -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(timelinePosts, key = { it.id }) { post ->
-                        TimelinePostCard(
-                            post = post,
-                            isAdmin = isAdmin,
-                            onLike = { onTogglePostLike(post) },
-                            onDelete = { onDeletePost(post.id) },
-                            onBanOneDay = {
-                                onBanUserOneDay(
-                                    post.authorIdentifier,
-                                    post.authorName,
-                                    "تقييد من الإدارة على منشور التايملاين"
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-            1 -> {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        reverseLayout = true,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(generalChat, key = { it.id }) { msg ->
-                            val nameColor = remember(msg.senderColor) {
-                                try {
-                                    Color(android.graphics.Color.parseColor(msg.senderColor))
-                                } catch (_: Exception) {
-                                    RespectPurpleBright
-                                }
-                            }
-                            HazeGlassCard(contentPadding = PaddingValues(12.dp), cornerRadius = 16.dp) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = msg.senderName,
-                                            color = nameColor,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp
-                                        )
-                                        if (msg.isAdmin) {
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = RespectPurple.copy(alpha = 0.28f)
-                                            ) {
-                                                Text(
-                                                    "إدارة",
-                                                    color = RespectPurpleBright,
-                                                    fontSize = 10.sp,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (isAdmin) {
-                                        IconButton(
-                                            onClick = { onDeleteChatMessage(msg.id) },
-                                            modifier = Modifier.size(26.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Rounded.DeleteOutline,
-                                                contentDescription = "حذف",
-                                                tint = Color(0xFFFCA5A5),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(msg.content, color = TextPrimary, fontSize = 14.sp)
-                            }
-                        }
-                    }
-
-                    HazeGlassCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                        cornerRadius = 18.dp,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                HazeGlassCard(contentPadding = PaddingValues(12.dp), cornerRadius = 16.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            OutlinedTextField(
-                                value = chatInput,
-                                onValueChange = { chatInput = it },
-                                placeholder = { Text("سولف مع مجتمع RESPECT...", color = TextMuted) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                keyboardActions = KeyboardActions(onSend = {
-                                    if (chatInput.isNotBlank()) {
-                                        onSendGeneralChat(chatInput)
-                                        chatInput = ""
-                                    }
-                                }),
-                                modifier = Modifier.weight(1f)
+                            Text(
+                                text = msg.senderName,
+                                color = nameColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
                             )
-                            IconButton(onClick = {
-                                if (chatInput.isNotBlank()) {
-                                    onSendGeneralChat(chatInput)
-                                    chatInput = ""
+                            if (msg.isAdmin) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = RespectPurple.copy(alpha = 0.24f)
+                                ) {
+                                    Text(
+                                        "إدارة",
+                                        color = RespectPurpleBright,
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
                                 }
-                            }) {
+                            }
+                        }
+
+                        if (isAdmin) {
+                            IconButton(
+                                onClick = { onDeleteChatMessage(msg.id) },
+                                modifier = Modifier.size(26.dp)
+                            ) {
                                 Icon(
-                                    Icons.AutoMirrored.Rounded.Send,
-                                    contentDescription = "إرسال",
-                                    tint = RespectPurpleBright
+                                    Icons.Rounded.DeleteOutline,
+                                    contentDescription = "حذف",
+                                    tint = Color(0xFFFCA5A5),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(msg.content, color = TextPrimary, fontSize = 14.sp)
                 }
             }
+        }
 
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(analyses, key = { it.id }) { item ->
-                        HazeGlassCard(isGlowing = true) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "${item.streamerName} • ${item.authorName}",
-                                    color = RespectPurpleBright,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Rounded.Star,
-                                        contentDescription = null,
-                                        tint = GoldAccent,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        " ${item.rating}/10",
-                                        color = GoldAccent,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                    if (isAdmin) {
-                                        IconButton(
-                                            onClick = { onDeleteAnalysis(item.id) },
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Rounded.DeleteOutline,
-                                                contentDescription = "حذف",
-                                                tint = Color(0xFFFCA5A5),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(item.title, style = MaterialTheme.typography.titleMedium)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(item.analysisText, style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
+        HazeGlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            cornerRadius = 18.dp,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = chatInput,
+                    onValueChange = { chatInput = it },
+                    placeholder = { Text("سولف مع مجتمع RESPECT...", color = TextMuted) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        if (chatInput.isNotBlank()) {
+                            onSendGeneralChat(chatInput)
+                            chatInput = ""
                         }
+                    }),
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = {
+                    if (chatInput.isNotBlank()) {
+                        onSendGeneralChat(chatInput)
+                        chatInput = ""
                     }
+                }) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.Send,
+                        contentDescription = "إرسال",
+                        tint = RespectPurpleBright
+                    )
                 }
             }
         }
     }
+}
 
-    if (showComposePost) {
-        ComposeTimelineDialog(
-            isAdmin = isAdmin,
-            onDismiss = { showComposePost = false },
-            onPublish = { text, mediaUrl, mediaType, announce ->
-                onCreatePost(text, mediaUrl, mediaType, announce)
-                showComposePost = false
+@Composable
+fun StreamAnalysisContent(
+    analyses: List<AnalysisEntity>,
+    isAdmin: Boolean,
+    onDeleteAnalysis: (Long) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(analyses, key = { it.id }) { item ->
+            HazeGlassCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${item.streamerName} • ${item.authorName}",
+                        color = RespectPurpleBright,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Star,
+                            contentDescription = null,
+                            tint = GoldAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            " ${item.rating}/10",
+                            color = GoldAccent,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        if (isAdmin) {
+                            IconButton(
+                                onClick = { onDeleteAnalysis(item.id) },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.DeleteOutline,
+                                    contentDescription = "حذف",
+                                    tint = Color(0xFFFCA5A5),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(item.title, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(item.analysisText, style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
             }
-        )
-    }
-
-    if (showAddAnalysis) {
-        AddAnalysisDialog(
-            onDismiss = { showAddAnalysis = false },
-            onSave = { slug, name, title, body, rating ->
-                onAddAnalysis(slug, name, title, body, rating)
-                showAddAnalysis = false
-            }
-        )
+        }
     }
 }
 
@@ -360,8 +301,8 @@ private fun TimelinePostCard(
         if (post.isOfficialAnnouncement) {
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = RespectPurple.copy(alpha = 0.25f),
-                border = BorderStroke(1.dp, RespectPurpleBright.copy(alpha = 0.6f)),
+                color = RespectPurple.copy(alpha = 0.20f),
+                border = BorderStroke(1.dp, RespectPurpleBright.copy(alpha = 0.55f)),
                 modifier = Modifier.padding(bottom = 8.dp)
             ) {
                 Row(
@@ -448,7 +389,7 @@ private fun TimelinePostCard(
             if (post.mediaType == "VIDEO") {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = RespectPurple.copy(alpha = 0.16f),
+                    color = RespectSurface,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -467,7 +408,7 @@ private fun TimelinePostCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(190.dp)
+                        .height(195.dp)
                         .clip(RoundedCornerShape(16.dp))
                 )
             }
@@ -488,8 +429,9 @@ private fun TimelinePostCard(
 }
 
 @Composable
-private fun ComposeTimelineDialog(
+fun ComposeTimelineDialog(
     isAdmin: Boolean,
+    onUploadImage: suspend (Context, Uri) -> Result<String>,
     onDismiss: () -> Unit,
     onPublish: (String, String, String, Boolean) -> Unit
 ) {
@@ -510,10 +452,18 @@ private fun ComposeTimelineDialog(
                     label = { Text("اكتب تغريدتك للمجتمع...") },
                     minLines = 3
                 )
+                TelegraphImagePickerButton(
+                    label = "اختر وارفع صورة via Telegraph",
+                    onUploadImage = onUploadImage,
+                    onUploadedUrl = { url ->
+                        mediaUrl = url
+                        mediaType = "IMAGE"
+                    }
+                )
                 OutlinedTextField(
                     value = mediaUrl,
                     onValueChange = { mediaUrl = it },
-                    label = { Text("رابط صورة أو فيديو (اختياري)") },
+                    label = { Text("رابط صورة Telegraph أو فيديو (اختياري)") },
                     singleLine = true
                 )
                 if (mediaUrl.isNotBlank()) {
@@ -542,7 +492,7 @@ private fun ComposeTimelineDialog(
 }
 
 @Composable
-private fun AddAnalysisDialog(
+fun AddAnalysisDialog(
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, Int) -> Unit
 ) {

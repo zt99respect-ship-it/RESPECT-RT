@@ -55,6 +55,7 @@ data class ScheduleEventEntity(
 data class TimelinePostEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val remoteId: String = "",
     val authorName: String,
     val authorIdentifier: String,
     val authorAvatarUrl: String = "",
@@ -129,4 +130,19 @@ data class BannedUserEntity(
     val reason: String,
     val bannedUntilMs: Long,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "community_users")
+data class CommunityUserEntity(
+    @PrimaryKey
+    val uid: String,
+    val displayName: String,
+    val email: String = "",
+    val avatarUrl: String = "",
+    val bio: String = "",
+    val role: String = "USER", // USER, ADMIN
+    val isMuted: Boolean = false,
+    val mutedUntilMs: Long = 0L,
+    val banReason: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
 )

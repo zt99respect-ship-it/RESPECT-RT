@@ -3,10 +3,12 @@ package com.respect.community.di
 import android.content.Context
 import com.respect.community.data.local.CommunityDatabase
 import com.respect.community.data.local.SessionManager
+import com.respect.community.data.remote.FirebaseManager
 import com.respect.community.data.remote.KickAuthApi
 import com.respect.community.data.remote.KickChatWebSocket
 import com.respect.community.data.remote.KickPublicApi
 import com.respect.community.data.remote.KickV2Api
+import com.respect.community.data.remote.TelegraphUploader
 import com.respect.community.data.repository.CommunityRepository
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -29,7 +31,7 @@ class AppContainer(context: Context) {
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
                     .header("Accept", "application/json")
-                    .header("User-Agent", "RespectCommunityAndroid/1.0")
+                    .header("User-Agent", "RespectCommunityAndroid/2.0")
                     .build()
                 chain.proceed(req)
             }
@@ -72,6 +74,14 @@ class AppContainer(context: Context) {
         SessionManager(appContext)
     }
 
+    val firebaseManager: FirebaseManager by lazy {
+        FirebaseManager(appContext)
+    }
+
+    val telegraphUploader: TelegraphUploader by lazy {
+        TelegraphUploader(okHttpClient)
+    }
+
     val chatWebSocket: KickChatWebSocket by lazy {
         KickChatWebSocket(okHttpClient, v2Api)
     }
@@ -83,7 +93,9 @@ class AppContainer(context: Context) {
             v2Api = v2Api,
             db = database,
             sessionManager = sessionManager,
-            chatWebSocket = chatWebSocket
+            chatWebSocket = chatWebSocket,
+            firebaseManager = firebaseManager,
+            telegraphUploader = telegraphUploader
         )
     }
 }

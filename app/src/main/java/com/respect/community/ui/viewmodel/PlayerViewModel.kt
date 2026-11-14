@@ -5,12 +5,18 @@ import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.respect.community.data.local.KickAuthSession
 import com.respect.community.data.local.entity.ChatMessageEntity
@@ -27,11 +33,31 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-enum class StreamQuality(val label: String, val maxWidth: Int, val maxHeight: Int) {
-    AUTO("تلقائي (Auto)", Int.MAX_VALUE, Int.MAX_VALUE),
-    Q1080P("1080p", 1920, 1080),
-    Q720P("720p", 1280, 720),
-    Q480P("480p", 854, 480)
+data class VideoQualityOption(
+    val id: String,
+    val label: String,
+    val maxWidth: Int,
+    val maxHeight: Int,
+    val bitrate: Int = Int.MAX_VALUE,
+    val groupIndex: Int = -1,
+    val trackIndex: Int = -1
+) {
+    companion object {
+        val AUTO = VideoQualityOption(
+            id = "auto",
+            label = "تلقائي (Auto)",
+            maxWidth = Int.MAX_VALUE,
+            maxHeight = Int.MAX_VALUE
+        )
+
+        val DEFAULT_PRESETS = listOf(
+            AUTO,
+            VideoQualityOption("1080p", "1080p Full HD", 1920, 1080),
+            VideoQualityOption("720p", "720p HD", 1280, 720),
+            VideoQualityOption("480p", "480p SD", 854, 480),
+            VideoQualityOption("360p", "360p توفير", 640, 360)
+        )
+    }
 }
 
 @OptIn(UnstableApi::class)
@@ -41,9 +67,36 @@ class PlayerViewModel(
     private val repository: CommunityRepository
 ) : ViewModel() {
 
-    private val trackSelector = DefaultTrackSelector(appContext)
+    private val trackSelector = DefaultTrackSelector(appContext).apply {
+        setParameters(
+            buildUponParameters()
+                // Remove subtitles completely
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_FORCED)
+                .build()
+        )
+    }
+
+    private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        .setUserAgent("RespectCommunityAndroid/2.0")
+        .setConnectTimeoutMs(15_000)
+        .setReadTimeoutMs(15_000)
+        .setAllowCrossProtocolRedirects(true)
+
+    private val loadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            15_000, // minBufferMs
+            50_000, // maxBufferMs
+            1_500,  // bufferForPlaybackMs
+            3_000   // bufferForPlaybackAfterRebufferMs
+        )
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .setBackBuffer(10_000, true)
+        .build()
+
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(appContext)
         .setTrackSelector(trackSelector)
+        .setLoadControl(loadControl)
         .build()
 
     val streamer: StateFlow<StreamerEntity?> = repository.observeStreamer(slug)
@@ -57,8 +110,14 @@ class PlayerViewModel(
     val kickAuthSession: StateFlow<KickAuthSession> = repository.kickAuthSessionFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), KickAuthSession())
 
-    private val _selectedQuality = MutableStateFlow(StreamQuality.AUTO)
-    val selectedQuality: StateFlow<StreamQuality> = _selectedQuality.asStateFlow()
+    private val _availableQualities = MutableStateFlow(VideoQualityOption.DEFAULT_PRESETS)
+    val availableQualities: StateFlow<List<VideoQualityOption>> = _availableQualities.asStateFlow()
+
+    private val _selectedQuality = MutableStateFlow(VideoQualityOption.AUTO)
+    val selectedQuality: StateFlow<VideoQualityOption> = _selectedQuality.asStateFlow()
+
+    private val _isBuffering = MutableStateFlow(false)
+    val isBuffering: StateFlow<Boolean> = _isBuffering.asStateFlow()
 
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
@@ -79,11 +138,19 @@ class PlayerViewModel(
     init {
         exoPlayer.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
+                _isBuffering.value = false
                 _playerError.value = "تعذر تشغيل البث (${error.errorCodeName})"
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) _playerError.value = null
+                _isBuffering.value = playbackState == Player.STATE_BUFFERING
+                if (playbackState == Player.STATE_READY) {
+                    _playerError.value = null
+                }
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                updateDetectedQualities(tracks)
             }
         })
 
@@ -120,22 +187,96 @@ class PlayerViewModel(
     private fun loadStream(url: String) {
         loadedPlaybackUrl = url
         _playerError.value = null
-        val item = MediaItem.Builder()
+        _isBuffering.value = true
+
+        val mediaItem = MediaItem.Builder()
             .setUri(url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
+            .setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(3_000)
+                    .setMinPlaybackSpeed(0.95f)
+                    .setMaxPlaybackSpeed(1.05f)
+                    .build()
+            )
             .build()
-        exoPlayer.setMediaItem(item)
+
+        val hlsSource = HlsMediaSource.Factory(httpDataSourceFactory)
+            .setAllowChunklessPreparation(true)
+            .createMediaSource(mediaItem)
+
+        exoPlayer.setMediaSource(hlsSource)
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
     }
 
-    fun setQuality(quality: StreamQuality) {
+    private fun updateDetectedQualities(tracks: Tracks) {
+        val detected = mutableListOf<VideoQualityOption>()
+        tracks.groups.forEachIndexed { gIdx, group ->
+            if (group.type == C.TRACK_TYPE_VIDEO) {
+                for (tIdx in 0 until group.length) {
+                    if (!group.isTrackSupported(tIdx)) continue
+                    val format = group.getTrackFormat(tIdx)
+                    val height = format.height
+                    val width = format.width
+                    if (height > 0 && width > 0) {
+                        val label = when {
+                            height >= 1080 -> "${height}p Full HD"
+                            height >= 720 -> "${height}p HD"
+                            else -> "${height}p"
+                        }
+                        detected.add(
+                            VideoQualityOption(
+                                id = "${height}_${gIdx}_$tIdx",
+                                label = label,
+                                maxWidth = width,
+                                maxHeight = height,
+                                bitrate = if (format.bitrate > 0) format.bitrate else Int.MAX_VALUE,
+                                groupIndex = gIdx,
+                                trackIndex = tIdx
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        val unique = detected
+            .sortedByDescending { it.maxHeight }
+            .distinctBy { it.maxHeight }
+
+        _availableQualities.value = if (unique.isNotEmpty()) {
+            listOf(VideoQualityOption.AUTO) + unique
+        } else {
+            VideoQualityOption.DEFAULT_PRESETS
+        }
+    }
+
+    fun setQuality(quality: VideoQualityOption) {
         _selectedQuality.value = quality
         val builder = trackSelector.buildUponParameters()
-        if (quality == StreamQuality.AUTO) {
-            builder.clearVideoSizeConstraints().setMaxVideoBitrate(Int.MAX_VALUE)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+
+        if (quality.id == VideoQualityOption.AUTO.id) {
+            builder.clearVideoSizeConstraints()
+                .setMaxVideoBitrate(Int.MAX_VALUE)
         } else {
+            val videoGroups = exoPlayer.currentTracks.groups
+            val matchedGroup = quality.groupIndex
+                .takeIf { it in videoGroups.indices }
+                ?.let { videoGroups[it] }
+                ?.takeIf { it.type == C.TRACK_TYPE_VIDEO && quality.trackIndex in 0 until it.length }
+
+            if (matchedGroup != null) {
+                builder.addOverride(
+                    TrackSelectionOverride(matchedGroup.mediaTrackGroup, listOf(quality.trackIndex))
+                )
+            }
             builder.setMaxVideoSize(quality.maxWidth, quality.maxHeight)
+            if (quality.bitrate != Int.MAX_VALUE) {
+                builder.setMaxVideoBitrate(quality.bitrate)
+            }
         }
         trackSelector.setParameters(builder.build())
     }

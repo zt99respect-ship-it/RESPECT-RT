@@ -1,0 +1,159 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Community member profile and moderation state",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 80 },
+        "email": { "type": "string", "maxLength": 160 },
+        "avatarUrl": { "type": "string", "maxLength": 512 },
+        "bio": { "type": "string", "maxLength": 300 },
+        "role": { "type": "string", "enum": ["USER", "ADMIN"] },
+        "isMuted": { "type": "boolean" },
+        "mutedUntilMs": { "type": "number" },
+        "banReason": { "type": "string", "maxLength": 240 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "displayName", "role", "isMuted", "createdAt", "updatedAt"]
+    },
+    "Streamer": {
+      "title": "Streamer",
+      "description": "Tracked KICK streamer in RESPECT Community",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string", "maxLength": 80, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "maxLength": 80 },
+        "characterNames": { "type": "string", "maxLength": 200 },
+        "broadcasterUserId": { "type": "number" },
+        "isFeatured": { "type": "boolean" },
+        "addedByUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["slug", "displayName", "addedByUid", "createdAt", "updatedAt"]
+    },
+    "TimelinePost": {
+      "title": "TimelinePost",
+      "description": "Community social timeline post with optional Telegraph image or video",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "authorUid": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 80 },
+        "authorAvatarUrl": { "type": "string", "maxLength": 512 },
+        "isAdminPost": { "type": "boolean" },
+        "isOfficialAnnouncement": { "type": "boolean" },
+        "content": { "type": "string", "maxLength": 1200 },
+        "mediaUrl": { "type": "string", "maxLength": 512 },
+        "mediaType": { "type": "string", "enum": ["NONE", "IMAGE", "VIDEO"] },
+        "likesCount": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["authorUid", "authorName", "content", "mediaType", "likesCount", "createdAt"]
+    },
+    "ScheduleEvent": {
+      "title": "ScheduleEvent",
+      "description": "Scheduled stream event and prediction",
+      "type": "object",
+      "properties": {
+        "streamerSlug": { "type": "string", "maxLength": 80 },
+        "streamerName": { "type": "string", "maxLength": 80 },
+        "scheduledDate": { "type": "string", "maxLength": 60 },
+        "scheduledTime": { "type": "string", "maxLength": 60 },
+        "gameCategory": { "type": "string", "maxLength": 80 },
+        "predictionNote": { "type": "string", "maxLength": 400 },
+        "createdByUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["streamerSlug", "streamerName", "scheduledDate", "scheduledTime", "createdByUid", "createdAt"]
+    },
+    "Suggestion": {
+      "title": "Suggestion",
+      "description": "User suggestion for adding a KICK streamer",
+      "type": "object",
+      "properties": {
+        "kickUsername": { "type": "string", "maxLength": 80 },
+        "characterNames": { "type": "string", "maxLength": 200 },
+        "reason": { "type": "string", "maxLength": 300 },
+        "suggestedByUid": { "type": "string", "maxLength": 128 },
+        "suggestedByName": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["kickUsername", "suggestedByUid", "suggestedByName", "status", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "General community chat room message",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 80 },
+        "senderColor": { "type": "string", "maxLength": 16 },
+        "isAdmin": { "type": "boolean" },
+        "content": { "type": "string", "maxLength": 600 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["senderUid", "senderName", "content", "createdAt"]
+    },
+    "Clip": {
+      "title": "Clip",
+      "description": "Short video clip item",
+      "type": "object",
+      "properties": {
+        "streamerSlug": { "type": "string", "maxLength": 80 },
+        "streamerName": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "maxLength": 160 },
+        "videoUrl": { "type": "string", "maxLength": 512 },
+        "thumbnailUrl": { "type": "string", "maxLength": 512 },
+        "uploadedByUid": { "type": "string", "maxLength": 128 },
+        "uploadedByName": { "type": "string", "maxLength": 80 },
+        "likesCount": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["streamerSlug", "streamerName", "title", "videoUrl", "uploadedByUid", "createdAt"]
+    },
+    "Artwork": {
+      "title": "Artwork",
+      "description": "Community fan art item",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 140 },
+        "artistName": { "type": "string", "maxLength": 80 },
+        "imageUrl": { "type": "string", "maxLength": 512 },
+        "aspectRatio": { "type": "number" },
+        "uploadedByUid": { "type": "string", "maxLength": 128 },
+        "likesCount": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "artistName", "imageUrl", "uploadedByUid", "createdAt"]
+    },
+    "GlobalSettings": {
+      "title": "GlobalSettings",
+      "description": "Admin-managed global community settings",
+      "type": "object",
+      "properties": {
+        "maintenanceMode": { "type": "boolean" },
+        "bannerText": { "type": "string", "maxLength": 300 },
+        "allowGuestPosts": { "type": "boolean" },
+        "pollIntervalSeconds": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["maintenanceMode", "allowGuestPosts", "pollIntervalSeconds", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": { "$ref": "#/entities/UserProfile" }, "description": "User profiles" },
+    "/streamers/{slug}": { "schema": { "$ref": "#/entities/Streamer" }, "description": "Tracked streamers" },
+    "/timeline_posts/{postId}": { "schema": { "$ref": "#/entities/TimelinePost" }, "description": "Timeline posts" },
+    "/stream_schedule/{eventId}": { "schema": { "$ref": "#/entities/ScheduleEvent" }, "description": "Stream schedule" },
+    "/streamer_suggestions/{suggestionId}": { "schema": { "$ref": "#/entities/Suggestion" }, "description": "Streamer suggestions" },
+    "/general_chat/{messageId}": { "schema": { "$ref": "#/entities/ChatMessage" }, "description": "General chat messages" },
+    "/clips/{clipId}": { "schema": { "$ref": "#/entities/Clip" }, "description": "Community clips" },
+    "/artworks/{artId}": { "schema": { "$ref": "#/entities/Artwork" }, "description": "Community fan art" },
+    "/app_settings/{docId}": { "schema": { "$ref": "#/entities/GlobalSettings" }, "description": "Global admin settings" }
+  }
+}

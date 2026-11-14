@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -17,14 +18,16 @@ private val Context.communityDataStore: DataStore<Preferences> by preferencesDat
 )
 
 data class UserProfileState(
+    val uid: String = "",
     val displayName: String = "عضو RESPECT",
     val email: String = "member@respect.gg",
     val bio: String = "متابع ومشجع لمجتمع ريسبكت على KICK",
     val avatarUrl: String = "",
-    val isAdmin: Boolean = false
+    val isAdmin: Boolean = false,
+    val isFirebaseSignedIn: Boolean = false
 ) {
     val activeIdentifier: String
-        get() = email.ifBlank { displayName }
+        get() = uid.ifBlank { email.ifBlank { displayName } }
 }
 
 data class KickAuthSession(
@@ -46,14 +49,23 @@ data class NotificationPrefs(
     val favoritesOnly: Boolean = false
 )
 
+data class RemoteSettingsState(
+    val maintenanceMode: Boolean = false,
+    val bannerText: String = "",
+    val allowGuestPosts: Boolean = true,
+    val pollIntervalSeconds: Int = 15
+)
+
 class SessionManager(private val context: Context) {
 
     private object Keys {
+        val PROFILE_UID = stringPreferencesKey("profile_uid")
         val PROFILE_NAME = stringPreferencesKey("profile_name")
         val PROFILE_EMAIL = stringPreferencesKey("profile_email")
         val PROFILE_BIO = stringPreferencesKey("profile_bio")
         val PROFILE_AVATAR = stringPreferencesKey("profile_avatar")
         val IS_ADMIN = booleanPreferencesKey("is_admin")
+        val IS_FIREBASE_SIGNED_IN = booleanPreferencesKey("is_firebase_signed_in")
 
         val KICK_ACCESS_TOKEN = stringPreferencesKey("kick_access_token")
         val KICK_REFRESH_TOKEN = stringPreferencesKey("kick_refresh_token")
@@ -72,15 +84,22 @@ class SessionManager(private val context: Context) {
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         val FAVORITES_ONLY = booleanPreferencesKey("favorites_only")
+
+        val REMOTE_MAINTENANCE = booleanPreferencesKey("remote_maintenance")
+        val REMOTE_BANNER = stringPreferencesKey("remote_banner")
+        val REMOTE_ALLOW_GUEST = booleanPreferencesKey("remote_allow_guest")
+        val REMOTE_POLL_SEC = intPreferencesKey("remote_poll_sec")
     }
 
     val userProfileFlow: Flow<UserProfileState> = context.communityDataStore.data.map { prefs ->
         UserProfileState(
+            uid = prefs[Keys.PROFILE_UID].orEmpty(),
             displayName = prefs[Keys.PROFILE_NAME] ?: "عضو RESPECT",
             email = prefs[Keys.PROFILE_EMAIL] ?: "member@respect.gg",
             bio = prefs[Keys.PROFILE_BIO] ?: "متابع ومشجع لمجتمع ريسبكت على KICK",
             avatarUrl = prefs[Keys.PROFILE_AVATAR].orEmpty(),
-            isAdmin = prefs[Keys.IS_ADMIN] ?: false
+            isAdmin = prefs[Keys.IS_ADMIN] ?: false,
+            isFirebaseSignedIn = prefs[Keys.IS_FIREBASE_SIGNED_IN] ?: false
         )
     }
 
@@ -104,15 +123,48 @@ class SessionManager(private val context: Context) {
         )
     }
 
+    val remoteSettingsFlow: Flow<RemoteSettingsState> = context.communityDataStore.data.map { prefs ->
+        RemoteSettingsState(
+            maintenanceMode = prefs[Keys.REMOTE_MAINTENANCE] ?: false,
+            bannerText = prefs[Keys.REMOTE_BANNER].orEmpty(),
+            allowGuestPosts = prefs[Keys.REMOTE_ALLOW_GUEST] ?: true,
+            pollIntervalSeconds = (prefs[Keys.REMOTE_POLL_SEC] ?: 15).coerceIn(10, 120)
+        )
+    }
+
     suspend fun getProfileOnce(): UserProfileState = userProfileFlow.first()
     suspend fun getKickAuthOnce(): KickAuthSession = kickAuthSessionFlow.first()
     suspend fun getNotificationPrefsOnce(): NotificationPrefs = notificationPrefsFlow.first()
+    suspend fun getRemoteSettingsOnce(): RemoteSettingsState = remoteSettingsFlow.first()
 
     suspend fun updateProfile(name: String, bio: String, avatarUrl: String) {
         context.communityDataStore.edit { prefs ->
             prefs[Keys.PROFILE_NAME] = name.trim().ifBlank { "عضو RESPECT" }
             prefs[Keys.PROFILE_BIO] = bio.trim()
             prefs[Keys.PROFILE_AVATAR] = avatarUrl.trim()
+        }
+    }
+
+    suspend fun setFirebaseUserSession(
+        uid: String,
+        email: String,
+        displayName: String?,
+        isAdmin: Boolean
+    ) {
+        context.communityDataStore.edit { prefs ->
+            prefs[Keys.PROFILE_UID] = uid
+            if (email.isNotBlank()) prefs[Keys.PROFILE_EMAIL] = email
+            if (!displayName.isNullOrBlank()) prefs[Keys.PROFILE_NAME] = displayName
+            prefs[Keys.IS_ADMIN] = isAdmin
+            prefs[Keys.IS_FIREBASE_SIGNED_IN] = uid.isNotBlank()
+        }
+    }
+
+    suspend fun clearFirebaseSession() {
+        context.communityDataStore.edit { prefs ->
+            prefs.remove(Keys.PROFILE_UID)
+            prefs[Keys.IS_FIREBASE_SIGNED_IN] = false
+            prefs[Keys.IS_ADMIN] = false
         }
     }
 
@@ -125,6 +177,15 @@ class SessionManager(private val context: Context) {
                     prefs[Keys.PROFILE_NAME] = "إدارة RESPECT"
                 }
             }
+        }
+    }
+
+    suspend fun saveRemoteSettings(settings: RemoteSettingsState) {
+        context.communityDataStore.edit { prefs ->
+            prefs[Keys.REMOTE_MAINTENANCE] = settings.maintenanceMode
+            prefs[Keys.REMOTE_BANNER] = settings.bannerText
+            prefs[Keys.REMOTE_ALLOW_GUEST] = settings.allowGuestPosts
+            prefs[Keys.REMOTE_POLL_SEC] = settings.pollIntervalSeconds.coerceIn(10, 120)
         }
     }
 

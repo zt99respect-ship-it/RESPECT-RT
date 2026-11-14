@@ -19,7 +19,7 @@ object KickOAuthManager {
     private const val AUTHORIZE_ENDPOINT = "https://id.kick.com/oauth/authorize"
     private const val SCOPES = "user:read channel:read chat:write"
     // تم تثبيت الرابط هنا ليتطابق مع لوحة تحكم KICK
-    private const val REDIRECT_URI = "https://docs.kick.com" 
+    const val REDIRECT_URI = "https://docs.kick.com"
 
     suspend fun launchOAuthLogin(context: Context, sessionManager: SessionManager) {
         val verifier = generateCodeVerifier()

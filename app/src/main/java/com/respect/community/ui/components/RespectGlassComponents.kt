@@ -1,5 +1,10 @@
 package com.respect.community.ui.components
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -24,20 +29,31 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -47,6 +63,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -54,13 +71,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.respect.community.R
+import com.respect.community.ui.theme.DeepObsidian
 import com.respect.community.ui.theme.GlassBorder
+import com.respect.community.ui.theme.GlassHighlightBorder
 import com.respect.community.ui.theme.GlassPurpleBorder
 import com.respect.community.ui.theme.LiveCrimson
 import com.respect.community.ui.theme.RespectPurple
 import com.respect.community.ui.theme.RespectPurpleBright
-import com.respect.community.ui.theme.RespectPurpleDeep
 import com.respect.community.ui.theme.RespectSurface
+import com.respect.community.ui.theme.RespectSurfaceElevated
+import com.respect.community.ui.theme.RespectSurfaceGlass
 import com.respect.community.ui.theme.TextPrimary
 import com.respect.community.ui.theme.TextSecondary
 import com.respect.community.ui.theme.VoidBlack
@@ -69,6 +89,7 @@ import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 val LocalRespectHazeState = compositionLocalOf<HazeState?> { null }
@@ -76,31 +97,31 @@ val LocalRespectHazeState = compositionLocalOf<HazeState?> { null }
 @Composable
 fun respectGlassStyle(isGlowing: Boolean = false): HazeStyle {
     val tintColor = if (isGlowing) {
-        RespectPurpleDeep.copy(alpha = 0.48f)
+        RespectSurfaceElevated.copy(alpha = 0.72f)
     } else {
-        RespectSurface.copy(alpha = 0.68f)
+        RespectSurfaceGlass.copy(alpha = 0.68f)
     }
     return HazeStyle(
         backgroundColor = RespectSurface,
         tint = HazeTint(color = tintColor),
-        blurRadius = 22.dp,
-        noiseFactor = 0.08f
+        blurRadius = 24.dp,
+        noiseFactor = 0.05f
     )
 }
 
 @Composable
 fun RespectHazeContainer(
     hazeState: HazeState,
-    parallaxY: Float = 0f,
     modifier: Modifier = Modifier,
+    parallaxY: Float = 0f,
     content: @Composable BoxScope.() -> Unit
 ) {
     val transition = rememberInfiniteTransition(label = "bg_ambient")
     val glowAlpha by transition.animateFloat(
-        initialValue = 0.22f,
-        targetValue = 0.40f,
+        initialValue = 0.08f,
+        targetValue = 0.16f,
         animationSpec = infiniteRepeatable(
-            animation = tween(4200, easing = FastOutSlowInEasing),
+            animation = tween(5200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glow_alpha"
@@ -111,7 +132,7 @@ fun RespectHazeContainer(
             .fillMaxSize()
             .background(VoidBlack)
     ) {
-        // Blurred source backdrop captured by Haze
+        // Frosted dark obsidian backdrop (clean, no purple overkill)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -124,7 +145,20 @@ fun RespectHazeContainer(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { translationY = parallaxY }
-                    .alpha(0.24f)
+                    .alpha(0.08f)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                DeepObsidian,
+                                VoidBlack,
+                                DeepObsidian.copy(alpha = 0.92f)
+                            )
+                        )
+                    )
             )
             Box(
                 modifier = Modifier
@@ -133,10 +167,9 @@ fun RespectHazeContainer(
                         Brush.radialGradient(
                             colors = listOf(
                                 RespectPurple.copy(alpha = glowAlpha),
-                                RespectPurpleDeep.copy(alpha = 0.16f),
-                                VoidBlack.copy(alpha = 0.92f)
+                                Color.Transparent
                             ),
-                            radius = 1200f
+                            radius = 950f
                         )
                     )
             )
@@ -149,7 +182,7 @@ fun RespectHazeContainer(
 @Composable
 fun HazeGlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 22.dp,
+    cornerRadius: Dp = 20.dp,
     isGlowing: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     onClick: (() -> Unit)? = null,
@@ -157,7 +190,7 @@ fun HazeGlassCard(
 ) {
     val hazeState = LocalRespectHazeState.current
     val shape = RoundedCornerShape(cornerRadius)
-    val borderColor = if (isGlowing) GlassPurpleBorder else GlassBorder
+    val borderColor = if (isGlowing) GlassPurpleBorder else GlassHighlightBorder.copy(alpha = 0.14f)
     val style = respectGlassStyle(isGlowing)
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -178,7 +211,7 @@ fun HazeGlassCard(
     baseModifier = if (hazeState != null) {
         baseModifier.hazeChild(state = hazeState, style = style)
     } else {
-        baseModifier.background(RespectSurface.copy(alpha = 0.85f))
+        baseModifier.background(RespectSurfaceGlass)
     }
 
     baseModifier = baseModifier
@@ -208,7 +241,7 @@ fun ScaleBounceButton(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.94f else 1f,
+        targetValue = if (pressed) 0.95f else 1f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
         label = "btn_scale"
     )
@@ -217,7 +250,7 @@ fun ScaleBounceButton(
         onClick = onClick,
         enabled = enabled,
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = TextPrimary
@@ -234,13 +267,13 @@ fun GlassFilterChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(13.dp)
     Surface(
         onClick = onClick,
         modifier = modifier,
         shape = shape,
-        color = if (selected) RespectPurple.copy(alpha = 0.30f) else RespectSurface.copy(alpha = 0.65f),
-        border = BorderStroke(1.dp, if (selected) RespectPurpleBright else GlassBorder)
+        color = if (selected) RespectPurple.copy(alpha = 0.24f) else RespectSurface.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, if (selected) RespectPurpleBright.copy(alpha = 0.75f) else GlassBorder)
     ) {
         Text(
             text = label,
@@ -252,11 +285,68 @@ fun GlassFilterChip(
 }
 
 @Composable
+fun TelegraphImagePickerButton(
+    onUploadImage: suspend (Context, Uri) -> Result<String>,
+    onUploadedUrl: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "رفع صورة عبر Telegraph"
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isUploading by remember { mutableStateOf(false) }
+
+    val picker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                isUploading = true
+                onUploadImage(context, uri).onSuccess { url ->
+                    onUploadedUrl(url)
+                }
+                isUploading = false
+            }
+        }
+    }
+
+    OutlinedButton(
+        onClick = {
+            if (!isUploading) {
+                picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }
+        },
+        enabled = !isUploading,
+        shape = RoundedCornerShape(13.dp),
+        border = BorderStroke(1.dp, GlassHighlightBorder),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        if (isUploading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = RespectPurpleBright
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("جاري الرفع إلى Telegraph...", color = TextSecondary, fontSize = 12.sp)
+        } else {
+            Icon(
+                Icons.Rounded.CloudUpload,
+                contentDescription = null,
+                tint = RespectPurpleBright,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, color = TextPrimary, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 fun LivePulseBadge(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "live_pulse")
     val pulse by transition.animateFloat(
-        initialValue = 0.78f,
-        targetValue = 1.25f,
+        initialValue = 0.80f,
+        targetValue = 1.22f,
         animationSpec = infiniteRepeatable(
             animation = tween(850, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -266,9 +356,9 @@ fun LivePulseBadge(modifier: Modifier = Modifier) {
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = LiveCrimson.copy(alpha = 0.22f),
-        border = BorderStroke(1.dp, LiveCrimson.copy(alpha = 0.7f))
+        shape = RoundedCornerShape(9.dp),
+        color = LiveCrimson.copy(alpha = 0.20f),
+        border = BorderStroke(1.dp, LiveCrimson.copy(alpha = 0.65f))
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
