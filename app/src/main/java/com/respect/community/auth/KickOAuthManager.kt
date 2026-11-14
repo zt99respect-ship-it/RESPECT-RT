@@ -1,7 +1,11 @@
 package com.respect.community.auth
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Base64
+import androidx.browser.customtabs.CustomTabColorSchemeParams
+import androidx.browser.customtabs.CustomTabsIntent
 import com.respect.community.BuildConfig
 import com.respect.community.data.local.SessionManager
 import java.security.MessageDigest
@@ -11,8 +15,7 @@ object KickOAuthManager {
 
     private const val AUTHORIZE_ENDPOINT = "https://id.kick.com/oauth/authorize"
     private const val SCOPES = "user:read channel:read chat:write"
-    // تم تثبيت الرابط هنا ليتطابق مع لوحة تحكم KICK
-    const val REDIRECT_URI = "https://docs.kick.com"
+    const val REDIRECT_URI = "respect://oauth/callback"
 
     suspend fun prepareAuthorizeUrl(sessionManager: SessionManager): String {
         val verifier = generateCodeVerifier()
@@ -31,6 +34,29 @@ object KickOAuthManager {
             .appendQueryParameter("state", state)
             .build()
             .toString()
+    }
+
+    suspend fun launchOAuthFlow(context: Context, sessionManager: SessionManager) {
+        val url = prepareAuthorizeUrl(sessionManager)
+        val authUri = Uri.parse(url)
+        val colorParams = CustomTabColorSchemeParams.Builder()
+            .setToolbarColor(0xFF09090B.toInt())
+            .setNavigationBarColor(0xFF09090B.toInt())
+            .build()
+
+        val customTabsIntent = CustomTabsIntent.Builder()
+            .setShowTitle(true)
+            .setDefaultColorSchemeParams(colorParams)
+            .build()
+
+        runCatching {
+            customTabsIntent.launchUrl(context, authUri)
+        }.onFailure {
+            val fallback = Intent(Intent.ACTION_VIEW, authUri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(fallback)
+        }
     }
 
     private fun generateCodeVerifier(): String {

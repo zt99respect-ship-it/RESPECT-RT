@@ -27,8 +27,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.respect.community.R
 import com.respect.community.data.local.entity.AnalysisEntity
 import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.ChatMessageEntity
@@ -85,7 +88,13 @@ fun CommunityHubScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("مجتمع RESPECT", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
 
                 when (activeSection) {
                     0 -> ScaleBounceButton(onClick = { showComposePost = true }) {

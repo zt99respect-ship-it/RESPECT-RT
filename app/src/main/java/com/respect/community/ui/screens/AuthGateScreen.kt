@@ -42,12 +42,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.respect.community.R
 import com.respect.community.data.local.UserProfileState
 import com.respect.community.ui.components.GlassFilterChip
 import com.respect.community.ui.components.HazeGlassCard
@@ -95,11 +98,18 @@ fun AuthGateScreen(
             RespectBrandLogo(size = 84.dp, cornerRadius = 22.dp)
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("مجتمع RESPECT", style = MaterialTheme.typography.headlineLarge)
                 Text(
-                    text = if (needsVerification) "تأكيد البريد الإلكتروني مطلوب" else "بوابة الدخول الآمن عبر Firebase",
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (needsVerification) "تأكيد البريد الإلكتروني مطلوب" else "بوابة الدخول الآمن للمجتمع",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -126,7 +136,9 @@ fun AuthGateScreen(
                             color = CyanAccent,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "افتح الرسالة واضغط على رابط التحقق، ثم اضغط على زر التحقق أدناه للدخول إلى التطبيق.",
@@ -145,7 +157,7 @@ fun AuthGateScreen(
                             } else {
                                 Icon(Icons.Rounded.VerifiedUser, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("تم التفعيل — تحقق الآن")
+                                Text("تم التفعيل — تحقق الآن", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
 
@@ -158,13 +170,13 @@ fun AuthGateScreen(
                         ) {
                             Icon(Icons.Rounded.Refresh, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("إعادة إرسال رابط التفعيل", color = TextPrimary)
+                            Text("إعادة إرسال رابط التفعيل", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
 
                         TextButton(onClick = onSignOut) {
                             Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("تسجيل الخروج أو تغيير البريد", color = Color(0xFFFCA5A5))
+                            Text("تسجيل الخروج أو تغيير البريد", color = Color(0xFFFCA5A5), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -258,7 +270,11 @@ fun AuthGateScreen(
                         } else {
                             Icon(Icons.AutoMirrored.Rounded.Login, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (isRegisterMode) "إنشاء الحساب وإرسال التفعيل" else "دخول للمجتمع")
+                            Text(
+                                text = if (isRegisterMode) "إنشاء الحساب وإرسال التفعيل" else "دخول للمجتمع",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
 

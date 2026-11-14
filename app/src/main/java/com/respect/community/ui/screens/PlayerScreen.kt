@@ -311,7 +311,13 @@ fun PlayerScreen(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Icon(Icons.Rounded.HighQuality, contentDescription = "الجودة", tint = RespectPurpleBright, modifier = Modifier.size(18.dp))
-                                        Text(selectedQuality.label, color = TextPrimary, fontSize = 12.sp)
+                                        Text(
+                                            selectedQuality.label,
+                                            color = TextPrimary,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
 
@@ -371,12 +377,12 @@ fun PlayerScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(current?.displayName ?: "بث KICK", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(current?.displayName ?: "بث كيك", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(current?.streamTitle.orEmpty().ifBlank { current?.categoryName ?: "" }, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Rounded.Visibility, contentDescription = null, tint = RespectPurpleBright, modifier = Modifier.size(16.dp))
-                        Text(formatCompactNumber(current?.viewerCount ?: 0), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(formatCompactNumber(current?.viewerCount ?: 0), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -388,14 +394,20 @@ fun PlayerScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("دردشة KICK المباشرة", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "دردشة البث المباشرة",
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
                 val (label, col) = when (chatState) {
-                    ChatConnectionState.CONNECTED -> "WebSocket متصل" to KickEmerald
+                    ChatConnectionState.CONNECTED -> "دردشة مباشرة متصلة" to KickEmerald
                     ChatConnectionState.POLLING_FALLBACK -> "تحديث تلقائي" to CyanAccent
                     ChatConnectionState.CONNECTING -> "جاري الاتصال..." to RespectPurpleBright
                     ChatConnectionState.DISCONNECTED -> "غير متصل" to TextMuted
                 }
-                Text(label, color = col, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(label, color = col, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
 
             LazyColumn(
@@ -440,7 +452,7 @@ fun PlayerScreen(
                         OutlinedTextField(
                             value = chatInput,
                             onValueChange = { chatInput = it },
-                            placeholder = { Text("اكتب في دردشة KICK...", color = TextMuted) },
+                            placeholder = { Text("اكتب في دردشة البث...", color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = {
@@ -466,9 +478,17 @@ fun PlayerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("سجّل بحساب KICK لإرسال الرسائل", color = TextSecondary, fontSize = 13.sp)
+                        Text(
+                            "سجّل الدخول بحساب كيك لإرسال الرسائل",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         ScaleBounceButton(onClick = onRequestKickLogin) {
-                            Text("دخول KICK", fontSize = 12.sp)
+                            Text("دخول كيك", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }

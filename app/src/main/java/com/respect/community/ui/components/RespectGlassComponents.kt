@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -78,8 +79,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,6 +94,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -102,7 +106,6 @@ import com.respect.community.ui.theme.GlassPurpleBorder
 import com.respect.community.ui.theme.LiveCrimson
 import com.respect.community.ui.theme.RespectPurple
 import com.respect.community.ui.theme.RespectPurpleBright
-import com.respect.community.ui.theme.RespectSurface
 import com.respect.community.ui.theme.TextMuted
 import com.respect.community.ui.theme.TextPrimary
 import com.respect.community.ui.theme.TextSecondary
@@ -115,6 +118,55 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 const val RESPECT_LOGO_URL = "https://e.top4top.io/p_3970nqvyb0.png"
+
+enum class VideoUrlType {
+    TIKTOK,
+    TWITTER_X,
+    DIRECT_MEDIA,
+    WEB_FALLBACK
+}
+
+fun detectVideoUrlType(rawUrl: String): VideoUrlType {
+    val clean = rawUrl.trim().lowercase(Locale.US)
+    val pathWithoutQuery = clean.substringBefore("?")
+    return when {
+        clean.contains("tiktok.com") -> VideoUrlType.TIKTOK
+        clean.contains("twitter.com") || clean.contains("x.com") -> VideoUrlType.TWITTER_X
+        pathWithoutQuery.endsWith(".mp4") ||
+            pathWithoutQuery.endsWith(".m3u8") ||
+            pathWithoutQuery.endsWith(".webm") ||
+            clean.contains(".m3u8") ||
+            clean.contains(".mp4") -> VideoUrlType.DIRECT_MEDIA
+        else -> VideoUrlType.WEB_FALLBACK
+    }
+}
+
+fun extractTikTokVideoId(rawUrl: String): String? {
+    val match = Regex("""/video/(\d+)""").find(rawUrl.trim())
+    return match?.groupValues?.getOrNull(1)
+}
+
+fun buildTikTokPlayerUrl(rawUrl: String): String {
+    val clean = rawUrl.trim()
+    val videoId = extractTikTokVideoId(clean)
+    return if (!videoId.isNullOrBlank()) {
+        "https://www.tiktok.com/player/v1/$videoId"
+    } else {
+        clean
+    }
+}
+
+fun extractFirstVideoUrl(text: String): String? {
+    val match = Regex("""https?://[^\s<>"]+""", RegexOption.IGNORE_CASE).findAll(text)
+    for (m in match) {
+        val candidate = m.value.trimEnd('.', ',', ')', ']')
+        val type = detectVideoUrlType(candidate)
+        if (type == VideoUrlType.TIKTOK || type == VideoUrlType.TWITTER_X || type == VideoUrlType.DIRECT_MEDIA) {
+            return candidate
+        }
+    }
+    return null
+}
 
 val LocalRespectHazeState = compositionLocalOf<HazeState?> { null }
 
@@ -231,7 +283,7 @@ fun RespectBrandLogo(
         model = RESPECT_LOGO_URL,
         placeholder = painterResource(id = R.drawable.respect_logo),
         error = painterResource(id = R.drawable.respect_logo),
-        contentDescription = "RESPECT",
+        contentDescription = stringResource(R.string.brand_short),
         contentScale = ContentScale.Crop,
         modifier = modifier
             .size(size)
@@ -288,6 +340,8 @@ fun GlassFilterChip(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             color = if (selected) TextPrimary else TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp)
         )
     }
@@ -351,7 +405,7 @@ fun ErrorRetryState(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 18.dp),
+                .padding(vertical = 18.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -364,12 +418,14 @@ fun ErrorRetryState(
             Text(
                 text = message.ifBlank { "حدث خطأ في الاتصال بالشبكة" },
                 style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
             )
             ScaleBounceButton(onClick = onRetry) {
                 Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("إعادة المحاولة")
+                Text("إعادة المحاولة", maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -380,7 +436,7 @@ fun TelegraphImagePickerButton(
     onUploadImage: suspend (Context, Uri) -> Result<String>,
     onUploadedUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "رفع صورة عبر Telegraph"
+    label: String = stringResource(R.string.upload_via_telegraph)
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -418,7 +474,7 @@ fun TelegraphImagePickerButton(
                 color = RespectPurple
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("جاري الضغط والرفع...", color = TextSecondary, fontSize = 12.sp)
+            Text("جاري الضغط والرفع...", color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         } else {
             Icon(
                 Icons.Rounded.CloudUpload,
@@ -427,7 +483,7 @@ fun TelegraphImagePickerButton(
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(label, color = TextPrimary, fontSize = 12.sp)
+            Text(label, color = TextPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -440,29 +496,49 @@ fun VideoLinkPlayer(
     modifier: Modifier = Modifier,
     autoPlay: Boolean = false
 ) {
-    val lower = videoUrl.lowercase(Locale.US)
-    val isSocialWebEmbed = lower.contains("tiktok.com") ||
-        lower.contains("vm.tiktok.com") ||
-        lower.contains("twitter.com") ||
-        lower.contains("x.com")
+    val cleanUrl = videoUrl.trim()
+    val urlType = remember(cleanUrl) { detectVideoUrlType(cleanUrl) }
 
-    if (isSocialWebEmbed) {
-        val embedUrl = remember(videoUrl) { buildSocialEmbedUrl(videoUrl) }
+    if (urlType == VideoUrlType.TIKTOK || urlType == VideoUrlType.TWITTER_X || urlType == VideoUrlType.WEB_FALLBACK) {
+        val targetUrl = remember(cleanUrl, urlType) {
+            when (urlType) {
+                VideoUrlType.TIKTOK -> buildTikTokPlayerUrl(cleanUrl)
+                VideoUrlType.TWITTER_X -> cleanUrl
+                else -> cleanUrl
+            }
+        }
+
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
+                    CookieManager.getInstance().setAcceptCookie(true)
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
                     settings.mediaPlaybackRequiresUserGesture = false
                     settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    settings.userAgentString =
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
                     setBackgroundColor(android.graphics.Color.BLACK)
                     webChromeClient = WebChromeClient()
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                            return false
+                            val next = request?.url?.toString().orEmpty()
+                            return !(next.startsWith("http://") || next.startsWith("https://"))
                         }
                     }
-                    loadUrl(embedUrl)
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    loadUrl(targetUrl)
+                }
+            },
+            update = { webView ->
+                if (webView.url != targetUrl) {
+                    webView.loadUrl(targetUrl)
                 }
             },
             modifier = modifier
@@ -471,11 +547,12 @@ fun VideoLinkPlayer(
         )
     } else {
         val context = LocalContext.current
-        val exoPlayer = remember(videoUrl) {
+        val exoPlayer = remember(cleanUrl) {
             val trackSelector = DefaultTrackSelector(context).apply {
                 setParameters(
                     buildUponParameters()
                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                        .setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_FORCED)
                         .build()
                 )
             }
@@ -491,9 +568,9 @@ fun VideoLinkPlayer(
             ExoPlayer.Builder(context)
                 .setTrackSelector(trackSelector)
                 .setLoadControl(loadControl)
-                .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
+                .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
                 .build().apply {
-                    val mediaItem = MediaItem.fromUri(videoUrl)
+                    val mediaItem = MediaItem.fromUri(cleanUrl)
                     setMediaItem(mediaItem)
                     prepare()
                     playWhenReady = autoPlay
@@ -523,23 +600,6 @@ fun VideoLinkPlayer(
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.Black)
         )
-    }
-}
-
-private fun buildSocialEmbedUrl(rawUrl: String): String {
-    val clean = rawUrl.trim()
-    val lower = clean.lowercase(Locale.US)
-    return when {
-        lower.contains("tiktok.com") -> {
-            val match = Regex("""/video/(\d+)""").find(clean)
-            val id = match?.groupValues?.getOrNull(1)
-            if (id != null) "https://www.tiktok.com/embed/v2/$id" else clean
-        }
-        lower.contains("x.com") || lower.contains("twitter.com") -> {
-            val normalized = clean.replace("https://x.com/", "https://twitter.com/")
-            "https://platform.twitter.com/embed/Tweet.html?dnt=true&theme=dark&url=${Uri.encode(normalized)}"
-        }
-        else -> clean
     }
 }
 
@@ -578,7 +638,8 @@ fun LivePulseBadge(modifier: Modifier = Modifier) {
                 text = "مباشر",
                 color = Color(0xFFFCA5A5),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
             )
         }
     }

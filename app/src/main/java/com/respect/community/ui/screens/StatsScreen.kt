@@ -38,10 +38,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.respect.community.R
 import com.respect.community.ui.components.GlassFilterChip
 import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.LivePulseBadge
@@ -51,7 +53,6 @@ import com.respect.community.ui.components.formatCompactNumber
 import com.respect.community.ui.theme.CyanAccent
 import com.respect.community.ui.theme.GoldAccent
 import com.respect.community.ui.theme.KickEmerald
-import com.respect.community.ui.theme.RespectPurple
 import com.respect.community.ui.theme.RespectPurpleBright
 import com.respect.community.ui.theme.TextMuted
 import com.respect.community.ui.theme.TextPrimary
@@ -85,22 +86,32 @@ fun StatsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "رجوع", tint = TextPrimary)
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(Icons.Rounded.Leaderboard, contentDescription = null, tint = RespectPurpleBright, modifier = Modifier.size(20.dp))
-                                Text("RESPECT Charts", style = MaterialTheme.typography.headlineMedium)
+                                Text(
+                                    text = stringResource(R.string.charts_title),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                             Text(
-                                "رصد حي كل 10 دقائق من KICK + Firebase",
+                                text = stringResource(R.string.charts_subtitle),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -164,7 +175,12 @@ fun StatsScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(Icons.Rounded.BarChart, contentDescription = null, tint = RespectPurpleBright, modifier = Modifier.size(18.dp))
-                    Text("ترتيب صناع المحتوى (${selectedPeriod.label})", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "ترتيب صناع المحتوى (${selectedPeriod.label})",
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
@@ -194,6 +210,7 @@ fun StatsScreen(
                                 color = rankColor,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
+                                maxLines = 1,
                                 modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
                             )
                         }
@@ -224,14 +241,17 @@ fun StatsScreen(
                                     text = stat.displayName,
                                     style = MaterialTheme.typography.titleMedium,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 if (stat.isLiveNow) LivePulseBadge()
                             }
                             Text(
                                 text = "@${stat.slug}",
                                 color = TextMuted,
-                                fontSize = 11.sp
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -295,7 +315,7 @@ private fun HighlightStatCard(
             Text(title, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(modifier = Modifier.height(6.dp))
-        Text(metricValue, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(metricValue, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(streamerName, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -320,8 +340,8 @@ private fun StatMetricPill(
         ) {
             Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(14.dp))
             Spacer(modifier = Modifier.height(3.dp))
-            Text(value, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-            Text(label, color = TextMuted, fontSize = 10.sp, maxLines = 1)
+            Text(value, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, color = TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

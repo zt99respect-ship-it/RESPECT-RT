@@ -65,11 +65,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.respect.community.R
 import com.respect.community.data.local.KickAuthSession
 import com.respect.community.data.local.NotificationPrefs
 import com.respect.community.data.local.RemoteSettingsState
@@ -204,7 +207,13 @@ fun ProfileAdminScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("حسابي والإدارة", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    "حسابي والإدارة",
+                    style = MaterialTheme.typography.headlineMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GlassFilterChip("ملفي", section == 0, { section = 0 })
                     GlassFilterChip("لوحة الإدارة", section == 1, { section = 1 })
@@ -232,10 +241,17 @@ fun ProfileAdminScreen(
                                 .fillMaxWidth()
                                 .height(72.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(RespectPurple.copy(alpha = 0.14f)),
+                                .background(RespectPurple.copy(alpha = 0.14f))
+                                .padding(horizontal = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("أضف غلاف (Banner) عبر Telegraph أو رابط", color = TextMuted, fontSize = 11.sp)
+                            Text(
+                                "أضف صورة الغلاف عبر تيليغراف أو رابط مباشر",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                     }
@@ -255,13 +271,21 @@ fun ProfileAdminScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(profile.displayName, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    profile.displayName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
                                 if (profile.isAdmin) {
                                     Surface(shape = RoundedCornerShape(8.dp), color = GoldAccent.copy(alpha = 0.22f)) {
                                         Text(
                                             "أدمن",
                                             color = GoldAccent,
                                             fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }
@@ -269,20 +293,32 @@ fun ProfileAdminScreen(
                                     Icon(Icons.Rounded.VerifiedUser, contentDescription = "موثق", tint = KickEmerald, modifier = Modifier.size(16.dp))
                                 }
                             }
-                            Text(profile.email.ifBlank { "عضو ضيف" }, color = TextMuted, fontSize = 12.sp)
-                            Text("المتابَعون: ${streamers.count { it.isFollowed }} ستريمر", color = CyanAccent, fontSize = 12.sp)
+                            Text(
+                                profile.email.ifBlank { "عضو ضيف" },
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                "المتابَعون: ${streamers.count { it.isFollowed }} ستريمر",
+                                color = CyanAccent,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
                     TelegraphImagePickerButton(
-                        label = "رفع الصورة الشخصية (Avatar) عبر Telegraph",
+                        label = stringResource(R.string.upload_avatar_telegraph),
                         onUploadImage = onUploadImage,
                         onUploadedUrl = { uploaded -> avatarEdit = uploaded }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     TelegraphImagePickerButton(
-                        label = "رفع صورة الغلاف (Banner) عبر Telegraph",
+                        label = stringResource(R.string.upload_banner_telegraph),
                         onUploadImage = onUploadImage,
                         onUploadedUrl = { uploaded -> bannerEdit = uploaded }
                     )
@@ -298,7 +334,7 @@ fun ProfileAdminScreen(
                     OutlinedTextField(
                         value = avatarEdit,
                         onValueChange = { avatarEdit = it },
-                        label = { Text("رابط الصورة الشخصية (URL)") },
+                        label = { Text("رابط الصورة الشخصية") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -306,7 +342,7 @@ fun ProfileAdminScreen(
                     OutlinedTextField(
                         value = bannerEdit,
                         onValueChange = { bannerEdit = it },
-                        label = { Text("رابط الغلاف / Banner (URL)") },
+                        label = { Text("رابط صورة الغلاف") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -314,7 +350,7 @@ fun ProfileAdminScreen(
                     OutlinedTextField(
                         value = bioEdit,
                         onValueChange = { bioEdit = it },
-                        label = { Text("النبذة (Bio)") },
+                        label = { Text("النبذة التعريفية") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -322,17 +358,24 @@ fun ProfileAdminScreen(
                         onClick = { onUpdateProfile(nameEdit, bioEdit, avatarEdit, bannerEdit) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("حفظ الملف الشخصي")
+                        Text("حفظ الملف الشخصي", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
 
             item {
                 HazeGlassCard {
-                    Text("حساب Firebase Cloud", style = MaterialTheme.typography.titleMedium)
+                    Text("حساب السحابة والمصادقة", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(modifier = Modifier.height(6.dp))
                     if (profile.isFirebaseSignedIn) {
-                        Text("متصل بحساب Firebase: ${profile.email}", color = KickEmerald, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(
+                            "متصل بالحساب: ${profile.email}",
+                            color = KickEmerald,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         if (!profile.isEmailVerified && !profile.isAdmin) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text("البريد غير مفعل بعد", color = GoldAccent, fontSize = 12.sp)
@@ -352,7 +395,7 @@ fun ProfileAdminScreen(
                         OutlinedButton(onClick = onFirebaseSignOut, shape = RoundedCornerShape(13.dp), modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("تسجيل الخروج من Firebase")
+                            Text("تسجيل الخروج", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     } else {
                         if (isRegisterMode) {
@@ -392,7 +435,7 @@ fun ProfileAdminScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (isRegisterMode) "إنشاء حساب Firebase" else "دخول بحساب Firebase")
+                            Text(if (isRegisterMode) "إنشاء حساب جديد" else "تسجيل الدخول", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedButton(
@@ -400,7 +443,7 @@ fun ProfileAdminScreen(
                             shape = RoundedCornerShape(13.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (isRegisterMode) "لديك حساب؟ تسجيل الدخول" else "عضو جديد؟ إنشاء حساب")
+                            Text(if (isRegisterMode) "لديك حساب؟ تسجيل الدخول" else "عضو جديد؟ إنشاء حساب", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -408,13 +451,15 @@ fun ProfileAdminScreen(
 
             item {
                 HazeGlassCard(isGlowing = kickSession.isLoggedIn) {
-                    Text("ربط حساب KICK OAuth2", style = MaterialTheme.typography.titleMedium)
+                    Text("ربط حساب منصة كيك", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(modifier = Modifier.height(6.dp))
                     if (kickSession.isLoggedIn) {
                         Text(
-                            text = "متصل بالحساب: ${kickSession.kickUsername ?: "عضو KICK"}",
+                            text = "متصل بالحساب: ${kickSession.kickUsername ?: "عضو كيك"}",
                             color = KickEmerald,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         OutlinedButton(
@@ -424,11 +469,11 @@ fun ProfileAdminScreen(
                         ) {
                             Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("فصل حساب KICK")
+                            Text("فصل حساب كيك", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     } else {
                         Text(
-                            "اربط حسابك عبر المتصفح الداخلي التلقائي للمشاركة مباشرة في دردشة KICK دون أي نسخ/لصق.",
+                            "اربط حسابك عبر المتصفح الآمن للمشاركة مباشرة في دردشة البثوث تلقائياً.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextMuted
                         )
@@ -439,7 +484,7 @@ fun ProfileAdminScreen(
                         ) {
                             Icon(Icons.AutoMirrored.Rounded.Login, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("تسجيل الدخول عبر KICK")
+                            Text(stringResource(R.string.kick_login_button), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -449,7 +494,12 @@ fun ProfileAdminScreen(
                 HazeGlassCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Rounded.NotificationsActive, contentDescription = null, tint = RespectPurpleBright)
-                        Text("الإشعارات الفورية (${remoteSettings.pollIntervalSeconds} ثانية)", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "الإشعارات الفورية (${remoteSettings.pollIntervalSeconds} ثانية)",
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     if (!hasNotifPerm && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -457,11 +507,11 @@ fun ProfileAdminScreen(
                             onClick = { permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("تفعيل إذن الإشعارات")
+                            Text("تفعيل إذن الإشعارات", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
-                    ToggleRow("مراقبة البث بالخلفية (Foreground Service)", notificationPrefs.monitoringEnabled, onMonitoringChanged)
+                    ToggleRow("مراقبة البث بالخلفية", notificationPrefs.monitoringEnabled, onMonitoringChanged)
                     ToggleRow("صوت الإشعار المخصص", notificationPrefs.soundEnabled, onSoundChanged)
                     ToggleRow("الاهتزاز", notificationPrefs.vibrationEnabled, onVibrationChanged)
                     ToggleRow("تنبيهات المفعّل جرسهم فقط", notificationPrefs.favoritesOnly, onFavoritesOnlyChanged)
@@ -474,7 +524,7 @@ fun ProfileAdminScreen(
                     HazeGlassCard(isGlowing = true) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Rounded.AdminPanelSettings, contentDescription = null, tint = GoldAccent)
-                            Text("دخول لوحة إدارة RESPECT", style = MaterialTheme.typography.titleMedium)
+                            Text("دخول لوحة إدارة ريسبكت", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         OutlinedTextField(
@@ -512,9 +562,16 @@ fun ProfileAdminScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("لوحة إدارة RESPECT (6 أقسام)", style = MaterialTheme.typography.titleMedium, color = GoldAccent)
+                            Text(
+                                "لوحة إدارة ريسبكت",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = GoldAccent,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
                             OutlinedButton(onClick = onAdminLogout, shape = RoundedCornerShape(12.dp)) {
-                                Text("خروج", fontSize = 12.sp)
+                                Text("خروج", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
@@ -567,10 +624,28 @@ fun ProfileAdminScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text("${user.displayName} • ${user.role}", color = TextPrimary, fontWeight = FontWeight.Bold)
-                                            Text(user.email.ifBlank { user.uid }, color = TextMuted, fontSize = 12.sp)
+                                            Text(
+                                                "${user.displayName} • ${user.role}",
+                                                color = TextPrimary,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                user.email.ifBlank { user.uid },
+                                                color = TextMuted,
+                                                fontSize = 12.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
                                             if (user.banned || user.isMuted) {
-                                                Text("الحالة: محظور / مقيد (${user.banReason})", color = Color(0xFFFCA5A5), fontSize = 11.sp)
+                                                Text(
+                                                    "الحالة: محظور / مقيد (${user.banReason})",
+                                                    color = Color(0xFFFCA5A5),
+                                                    fontSize = 11.sp,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
                                         }
                                         IconButton(onClick = { onDeleteCommunityUser(user.uid) }) {
@@ -581,10 +656,10 @@ fun ProfileAdminScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                                         val isMod = user.role == "MODERATOR"
                                         OutlinedButton(onClick = { onUpdateUserRole(user.uid, if (isMod) "USER" else "MODERATOR") }) {
-                                            Text(if (isMod) "إزالة الإشراف" else "ترقية لمشرف (MOD)", fontSize = 11.sp)
+                                            Text(if (isMod) "إزالة الإشراف" else "ترقية لمشرف", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                         OutlinedButton(onClick = { onUpdateUserRole(user.uid, if (user.role == "ADMIN") "USER" else "ADMIN") }) {
-                                            Text(if (user.role == "ADMIN") "تخفيض لأدنى" else "ترقية لأدمن", fontSize = 11.sp)
+                                            Text(if (user.role == "ADMIN") "تخفيض لعضو" else "ترقية لأدمن", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                         val isRestricted = user.banned || user.isMuted
                                         OutlinedButton(
@@ -597,7 +672,7 @@ fun ProfileAdminScreen(
                                                 )
                                             }
                                         ) {
-                                            Text(if (isRestricted) "فك الحظر" else "حظر / كتم", color = GoldAccent, fontSize = 11.sp)
+                                            Text(if (isRestricted) "فك الحظر" else "حظر / كتم", color = GoldAccent, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                     }
                                 }
@@ -735,15 +810,15 @@ fun ProfileAdminScreen(
                         // 3. App Settings & Remote Config
                         item {
                             HazeGlassCard {
-                                Text("إعدادات التطبيق و Remote Config", style = MaterialTheme.typography.titleMedium)
+                                Text("إعدادات التطبيق عن بُعد", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(modifier = Modifier.height(10.dp))
-                                ToggleRow("وضع الصيانة (Maintenance Mode)", maintenanceDraft) { maintenanceDraft = it }
+                                ToggleRow("وضع الصيانة الكامل", maintenanceDraft) { maintenanceDraft = it }
                                 ToggleRow("السماح بالنشر للضيوف", guestPostsDraft) { guestPostsDraft = it }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 OutlinedTextField(
                                     value = bannerDraft,
                                     onValueChange = { bannerDraft = it },
-                                    label = { Text("نص شريط الإعلانات (Announcement Bar)") },
+                                    label = { Text("نص شريط الإعلانات العلوي") },
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -769,7 +844,7 @@ fun ProfileAdminScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("حفظ ونشر الإعدادات (Firestore)")
+                                    Text("حفظ ونشر الإعدادات", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 OutlinedButton(
@@ -779,7 +854,7 @@ fun ProfileAdminScreen(
                                 ) {
                                     Icon(Icons.Rounded.CloudSync, contentDescription = null)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("مزامنة Firebase Remote Config الآن")
+                                    Text("مزامنة الإعدادات السحابية الآن", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
@@ -789,12 +864,12 @@ fun ProfileAdminScreen(
                         // 4. Streamer Management (Add/Delete Global Streamers, Feature Streamer, Schedule)
                         item {
                             HazeGlassCard {
-                                Text("إضافة ستريمر عام للجميع (Global)", style = MaterialTheme.typography.titleMedium)
+                                Text("إضافة ستريمر عام للجميع", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 OutlinedTextField(
                                     value = newStreamerSlug,
                                     onValueChange = { newStreamerSlug = it },
-                                    label = { Text("اسم القناة في KICK") },
+                                    label = { Text("اسم القناة في كيك") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -905,7 +980,7 @@ fun ProfileAdminScreen(
                                 OutlinedTextField(
                                     value = notifTargetUid,
                                     onValueChange = { notifTargetUid = it },
-                                    label = { Text("UID المستخدم المحدد (اتركه فارغاً للإرسال للجميع)") },
+                                    label = { Text("معرّف المستخدم المحدد (اختياري للإرسال للجميع)") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -923,7 +998,12 @@ fun ProfileAdminScreen(
                                     ) {
                                         Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text(if (notifTargetUid.isBlank()) "إرسال للجميع" else "إرسال للمستخدم", fontSize = 12.sp)
+                                        Text(
+                                            if (notifTargetUid.isBlank()) "إرسال للجميع" else "إرسال للمستخدم",
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -935,7 +1015,13 @@ fun ProfileAdminScreen(
                                 ) {
                                     Icon(Icons.Rounded.NotificationsActive, contentDescription = null, tint = RespectPurpleBright)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Send Test Notification (DRB7H بدأ بثه)", color = TextPrimary, fontSize = 12.sp)
+                                    Text(
+                                        stringResource(R.string.send_test_notification),
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }

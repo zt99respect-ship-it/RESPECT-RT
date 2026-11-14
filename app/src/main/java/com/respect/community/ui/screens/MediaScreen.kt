@@ -36,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,9 +46,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.respect.community.R
 import com.respect.community.data.local.entity.ArtEntity
 import com.respect.community.data.local.entity.ClipEntity
 import com.respect.community.ui.components.HazeGlassCard
@@ -71,8 +77,15 @@ fun ClipsVerticalFeed(
     modifier: Modifier = Modifier
 ) {
     if (clips.isEmpty()) {
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            HazeGlassCard { Text("لا توجد كليبات مضافة بعد", style = MaterialTheme.typography.titleMedium) }
+        Box(modifier = modifier.padding(16.dp), contentAlignment = Alignment.Center) {
+            HazeGlassCard {
+                Text(
+                    text = "لا توجد كليبات مضافة بعد",
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         return
     }
@@ -82,7 +95,7 @@ fun ClipsVerticalFeed(
     VerticalPager(
         state = pagerState,
         beyondViewportPageCount = 1,
-        modifier = modifier.padding(horizontal = 12.dp)
+        modifier = modifier.padding(horizontal = 16.dp)
     ) { page ->
         val clip = clips[page]
         Box(
@@ -121,7 +134,7 @@ fun ClipsVerticalFeed(
                         )
                     }
                 }
-                Text("${clip.likesCount}", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("${clip.likesCount}", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
 
                 if (isAdmin) {
                     Surface(shape = CircleShape, color = Color(0x88090B10)) {
@@ -143,11 +156,25 @@ fun ClipsVerticalFeed(
                     text = "@${clip.streamerName}",
                     color = RespectPurpleBright,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(3.dp))
-                Text(clip.title, color = TextPrimary, fontSize = 14.sp)
-                Text("رفع بواسطة: ${clip.uploadedBy}", color = TextMuted, fontSize = 11.sp)
+                Text(
+                    text = clip.title,
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "رفع بواسطة: ${clip.uploadedBy}",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -164,7 +191,7 @@ fun ArtPinterestGrid(
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
         modifier = modifier,
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalItemSpacing = 10.dp
     ) {
@@ -180,8 +207,20 @@ fun ArtPinterestGrid(
                         .clip(RoundedCornerShape(14.dp))
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(art.title, style = MaterialTheme.typography.titleMedium, fontSize = 14.sp)
-                Text("الفنان: ${art.artistName}", color = TextSecondary, fontSize = 12.sp)
+                Text(
+                    text = art.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "الفنان: ${art.artistName}",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -196,7 +235,7 @@ fun ArtPinterestGrid(
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                        Text("${art.likesCount}", color = TextSecondary, fontSize = 12.sp)
+                        Text("${art.likesCount}", color = TextSecondary, fontSize = 12.sp, maxLines = 1)
                     }
 
                     if (isAdmin) {
@@ -227,22 +266,41 @@ fun AddClipDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = RespectSurface,
-        title = { Text("نشر كليب جديد", color = TextPrimary) },
+        title = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Text("نشر كليب جديد", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = streamerName, onValueChange = { streamerName = it }, label = { Text("اسم الستريمر") }, singleLine = true)
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان اللحظة") }, singleLine = true)
-                OutlinedTextField(
-                    value = videoUrl,
-                    onValueChange = { videoUrl = it },
-                    label = { Text("رابط الفيديو (TikTok / X / MP4 / HLS)") },
-                    singleLine = true
-                )
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = streamerName,
+                        onValueChange = { streamerName = it },
+                        label = { Text("اسم الستريمر") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("عنوان اللحظة") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = videoUrl,
+                        onValueChange = { videoUrl = it },
+                        label = { Text(stringResource(R.string.video_links_hint), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
-            ScaleBounceButton(onClick = { onAdd(streamerName, streamerName, title, videoUrl) }) {
-                Text("نشر الكليب")
+            ScaleBounceButton(onClick = { onAdd(streamerName.trim(), streamerName.trim(), title.trim(), videoUrl.trim()) }) {
+                Text("نشر الكليب", maxLines = 1)
             }
         },
         dismissButton = {
@@ -264,22 +322,46 @@ fun AddArtDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = RespectSurface,
-        title = { Text("إضافة رسمة لمعرض الفن", color = TextPrimary) },
+        title = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Text("إضافة رسمة لمعرض الفن", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان العمل الفني") }, singleLine = true)
-                OutlinedTextField(value = artist, onValueChange = { artist = it }, label = { Text("اسم الرسام") }, singleLine = true)
-                TelegraphImagePickerButton(
-                    label = "ضغط ورفع عبر Telegraph",
-                    onUploadImage = onUploadImage,
-                    onUploadedUrl = { imageUrl = it }
-                )
-                OutlinedTextField(value = imageUrl, onValueChange = { imageUrl = it }, label = { Text("رابط الصورة (Telegraph / URL)") }, singleLine = true)
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("عنوان العمل الفني") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = artist,
+                        onValueChange = { artist = it },
+                        label = { Text("اسم الرسام") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TelegraphImagePickerButton(
+                        label = stringResource(R.string.upload_via_telegraph),
+                        onUploadImage = onUploadImage,
+                        onUploadedUrl = { imageUrl = it }
+                    )
+                    OutlinedTextField(
+                        value = imageUrl,
+                        onValueChange = { imageUrl = it },
+                        label = { Text("رابط الصورة المباشر") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
-            ScaleBounceButton(onClick = { onAdd(title, artist, imageUrl) }) {
-                Text("إضافة")
+            ScaleBounceButton(onClick = { onAdd(title.trim(), artist.trim(), imageUrl.trim()) }) {
+                Text("إضافة", maxLines = 1)
             }
         },
         dismissButton = {

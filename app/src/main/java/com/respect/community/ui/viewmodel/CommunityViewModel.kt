@@ -187,9 +187,6 @@ class CommunityViewModel(
     private val _networkError = MutableStateFlow<String?>(null)
     val networkError: StateFlow<String?> = _networkError.asStateFlow()
 
-    private val _oauthWebUrl = MutableStateFlow<String?>(null)
-    val oauthWebUrl: StateFlow<String?> = _oauthWebUrl.asStateFlow()
-
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
@@ -594,26 +591,31 @@ class CommunityViewModel(
         }
     }
 
-    // --- KICK OAuth2 Auto-Intercept WebView ---
-    fun openKickOAuthWebView() {
+    // --- KICK OAuth2 (Chrome Custom Tabs + Deep Link) ---
+    fun launchKickOAuth(context: Context) {
         viewModelScope.launch {
-            runCatching { KickOAuthManager.prepareAuthorizeUrl(sessionManager) }
-                .onSuccess { url -> _oauthWebUrl.value = url }
-                .onFailure { _snackbarMessage.value = "تعذر تجهيز رابط تسجيل دخول KICK" }
+            runCatching { KickOAuthManager.launchOAuthFlow(context, sessionManager) }
+                .onFailure { _snackbarMessage.value = "تعذر فتح صفحة تسجيل دخول كيك" }
         }
     }
 
-    fun closeKickOAuthWebView() {
-        _oauthWebUrl.value = null
-    }
-
-    fun handleOAuthCode(code: String, state: String?) {
-        _oauthWebUrl.value = null
+    fun handleOAuthRedirect(uri: Uri) {
+        val error = uri.getQueryParameter("error")
+        if (!error.isNullOrBlank()) {
+            _snackbarMessage.value = "تم إلغاء تسجيل دخول كيك: $error"
+            return
+        }
+        val code = uri.getQueryParameter("code")
+        val state = uri.getQueryParameter("state")
+        if (code.isNullOrBlank()) {
+            _snackbarMessage.value = "لم يتم استلام رمز التفويض من كيك"
+            return
+        }
         viewModelScope.launch {
             _isBusy.value = true
             repository.exchangeOAuthCode(code, state)
-                .onSuccess { _snackbarMessage.value = "تم ربط حساب KICK (${it.kickUsername ?: "بنجاح"})" }
-                .onFailure { _snackbarMessage.value = it.message ?: "فشل ربط KICK" }
+                .onSuccess { _snackbarMessage.value = "تم ربط حساب كيك (${it.kickUsername ?: "بنجاح"})" }
+                .onFailure { _snackbarMessage.value = it.message ?: "فشل ربط حساب كيك" }
             _isBusy.value = false
         }
     }

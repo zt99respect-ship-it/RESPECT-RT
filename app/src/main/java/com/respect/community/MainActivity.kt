@@ -66,8 +66,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,7 +87,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.respect.community.auth.KickOAuthManager
-import com.respect.community.auth.KickOAuthWebViewDialog
 import com.respect.community.service.StreamMonitorService
 import com.respect.community.ui.components.HazeGlassCard
 import com.respect.community.ui.components.LocalRespectHazeState
@@ -115,10 +117,10 @@ import dev.chrisbanes.haze.hazeChild
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private sealed class CommunityTab(val route: String, val label: String, val icon: ImageVector) {
-    data object Streams : CommunityTab("streams", "البثوث", Icons.Rounded.LiveTv)
-    data object Community : CommunityTab("community", "المجتمع", Icons.Rounded.Forum)
-    data object Profile : CommunityTab("profile", "حسابي", Icons.Rounded.Person)
+private sealed class CommunityTab(val route: String, val labelRes: Int, val icon: ImageVector) {
+    data object Streams : CommunityTab("streams", R.string.tab_streams, Icons.Rounded.LiveTv)
+    data object Community : CommunityTab("community", R.string.tab_community, Icons.Rounded.Forum)
+    data object Profile : CommunityTab("profile", R.string.tab_profile, Icons.Rounded.Person)
 }
 
 class MainActivity : ComponentActivity() {
@@ -160,7 +162,12 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         val data = intent?.data
-        if (data != null && data.toString().startsWith(KickOAuthManager.REDIRECT_URI)) {
+        if (data != null && (
+                data.toString().startsWith(KickOAuthManager.REDIRECT_URI) ||
+                    (data.scheme == "respect" && data.host == "oauth" &&
+                        (data.path.isNullOrEmpty() || data.path?.startsWith("/callback") == true))
+                )
+        ) {
             pendingOAuthUri = data
         }
         val slug = intent?.getStringExtra(StreamMonitorService.EXTRA_OPEN_SLUG)
@@ -222,12 +229,12 @@ private fun RespectCommunityRoot(
     val isLoadingMorePosts by vm.isLoadingMorePosts.collectAsStateWithLifecycle()
     val isInitialLoading by vm.isInitialLoading.collectAsStateWithLifecycle()
     val networkError by vm.networkError.collectAsStateWithLifecycle()
-    val oauthWebUrl by vm.oauthWebUrl.collectAsStateWithLifecycle()
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val searchResults by vm.searchResults.collectAsStateWithLifecycle()
     val isBusy by vm.isBusy.collectAsStateWithLifecycle()
     val snackbarMsg by vm.snackbarMessage.collectAsStateWithLifecycle()
 
+    val activityContext = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val hazeState = remember { HazeState() }
     var showSearchOverlay by remember { mutableStateOf(false) }
@@ -240,11 +247,7 @@ private fun RespectCommunityRoot(
 
     LaunchedEffect(pendingOAuthUri) {
         if (pendingOAuthUri != null) {
-            val code = pendingOAuthUri.getQueryParameter("code")
-            val state = pendingOAuthUri.getQueryParameter("state")
-            if (!code.isNullOrBlank()) {
-                vm.handleOAuthCode(code, state)
-            }
+            vm.handleOAuthRedirect(pendingOAuthUri)
             onConsumedOAuthUri()
         }
     }
@@ -293,9 +296,11 @@ private fun RespectCommunityRoot(
                                     ) {
                                         RespectBrandLogo(size = 34.dp, cornerRadius = 10.dp)
                                         Text(
-                                            text = "RESPECT",
+                                            text = stringResource(R.string.brand_short),
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 19.sp
+                                            fontSize = 19.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 },
@@ -328,6 +333,7 @@ private fun RespectCommunityRoot(
                                 ) {
                                     tabs.forEach { tab ->
                                         val selected = currentRoute == tab.route
+                                        val tabLabel = stringResource(tab.labelRes)
                                         NavigationBarItem(
                                             selected = selected,
                                             onClick = {
@@ -337,8 +343,16 @@ private fun RespectCommunityRoot(
                                                     restoreState = true
                                                 }
                                             },
-                                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                                            label = { Text(tab.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                                            icon = { Icon(tab.icon, contentDescription = tabLabel) },
+                                            label = {
+                                                Text(
+                                                    tabLabel,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = RespectPurpleBright,
                                                 selectedTextColor = TextPrimary,
@@ -379,7 +393,7 @@ private fun RespectCommunityRoot(
                                     Text("وضع الصيانة مفعل", color = GoldAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        "يعمل فريق RESPECT حالياً على تحديث المنصة. يمكنك الدخول لحساب الإدارة من تبويب حسابي.",
+                                        "يعمل فريق ريسبكت حالياً على تحديث المنصة. يمكنك الدخول لحساب الإدارة من تبويب حسابي.",
                                         color = TextPrimary
                                     )
                                 }
@@ -464,7 +478,7 @@ private fun RespectCommunityRoot(
                                         onResendVerification = vm::resendVerificationEmail,
                                         onCheckVerification = vm::checkEmailVerification,
                                         onFirebaseSignOut = vm::signOutFirebase,
-                                        onKickOAuthLogin = vm::openKickOAuthWebView,
+                                        onKickOAuthLogin = { vm.launchKickOAuth(activityContext) },
                                         onKickLogout = vm::logoutKick,
                                         onMonitoringChanged = { enabled -> vm.setMonitoring(app, enabled) },
                                         onSoundChanged = vm::setSound,
@@ -521,25 +535,13 @@ private fun RespectCommunityRoot(
                                     PlayerScreen(
                                         viewModel = playerVm,
                                         onBack = { navController.popBackStack() },
-                                        onRequestKickLogin = vm::openKickOAuthWebView
+                                        onRequestKickLogin = { vm.launchKickOAuth(activityContext) }
                                     )
                                 }
                             }
                         }
                     }
                 }
-            }
-
-            if (oauthWebUrl != null) {
-                KickOAuthWebViewDialog(
-                    authorizeUrl = oauthWebUrl.orEmpty(),
-                    onCodeIntercepted = vm::handleOAuthCode,
-                    onError = { err ->
-                        vm.closeKickOAuthWebView()
-                        vm.showErrorSnackbar(err)
-                    },
-                    onDismiss = vm::closeKickOAuthWebView
-                )
             }
 
             if (showSearchOverlay) {
@@ -569,8 +571,21 @@ private fun RespectCommunityRoot(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         RespectBrandLogo(size = 104.dp, cornerRadius = 24.dp)
                         Spacer(modifier = Modifier.height(14.dp))
-                        Text("RESPECT COMMUNITY", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                        Text("مجتمع ريسبكت الرسمي", color = RespectPurpleBright, fontSize = 13.sp)
+                        Text(
+                            stringResource(R.string.app_name),
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 21.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            stringResource(R.string.brand_full),
+                            color = RespectPurpleBright,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
@@ -590,96 +605,107 @@ private fun UnifiedSearchDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(VoidBlack.copy(alpha = 0.96f))
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(VoidBlack.copy(alpha = 0.96f))
+                    .padding(16.dp)
             ) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    placeholder = { Text("ابحث في البثوث والمنشورات والكليبات والفن...", color = TextMuted) },
-                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = RespectPurpleBright) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = RespectPurpleBright,
-                        unfocusedBorderColor = GlassBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Rounded.Close, contentDescription = "إغلاق", tint = TextPrimary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        placeholder = {
+                            Text(
+                                stringResource(R.string.search_placeholder),
+                                color = TextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = RespectPurpleBright) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = RespectPurpleBright,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Rounded.Close, contentDescription = "إغلاق", tint = TextPrimary)
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                if (results.streamers.isNotEmpty()) {
-                    item { Text("الستريمرز", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
-                    items(results.streamers, key = { "sr_s_${it.slug}" }) { s ->
-                        HazeGlassCard(modifier = Modifier.clickable { onOpenStreamer(s.slug) }) {
-                            Text("${s.displayName} (@${s.slug})", color = TextPrimary, fontWeight = FontWeight.Bold)
-                            if (s.characterNames.isNotBlank()) {
-                                Text("الشخصيات: ${s.characterNames}", color = TextSecondary, fontSize = 12.sp)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    if (results.streamers.isNotEmpty()) {
+                        item { Text("الستريمرز", color = RespectPurpleBright, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        items(results.streamers, key = { "sr_s_${it.slug}" }) { s ->
+                            HazeGlassCard(modifier = Modifier.clickable { onOpenStreamer(s.slug) }) {
+                                Text("${s.displayName} (@${s.slug})", color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (s.characterNames.isNotBlank()) {
+                                    Text("الشخصيات: ${s.characterNames}", color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                         }
                     }
-                }
-                if (results.posts.isNotEmpty()) {
-                    item { Text("المنشورات", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
-                    items(results.posts, key = { "sr_p_${it.id}" }) { p ->
-                        HazeGlassCard {
-                            Text(p.authorName, color = RespectPurpleBright, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(p.content, color = TextPrimary, maxLines = 2)
+                    if (results.posts.isNotEmpty()) {
+                        item { Text("المنشورات", color = RespectPurpleBright, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        items(results.posts, key = { "sr_p_${it.id}" }) { p ->
+                            HazeGlassCard {
+                                Text(p.authorName, color = RespectPurpleBright, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(p.content, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
-                }
-                if (results.clips.isNotEmpty()) {
-                    item { Text("الكليبات", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
-                    items(results.clips, key = { "sr_c_${it.id}" }) { c ->
-                        HazeGlassCard {
-                            Text(c.title, color = TextPrimary, fontWeight = FontWeight.Bold)
-                            Text("@${c.streamerName}", color = TextMuted, fontSize = 12.sp)
+                    if (results.clips.isNotEmpty()) {
+                        item { Text("الكليبات", color = RespectPurpleBright, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        items(results.clips, key = { "sr_c_${it.id}" }) { c ->
+                            HazeGlassCard {
+                                Text(c.title, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("@${c.streamerName}", color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
-                }
-                if (results.arts.isNotEmpty()) {
-                    item { Text("معرض الفن", color = RespectPurpleBright, fontWeight = FontWeight.Bold) }
-                    items(results.arts, key = { "sr_a_${it.id}" }) { a ->
-                        HazeGlassCard {
-                            Text(a.title, color = TextPrimary, fontWeight = FontWeight.Bold)
-                            Text("الفنان: ${a.artistName}", color = TextMuted, fontSize = 12.sp)
+                    if (results.arts.isNotEmpty()) {
+                        item { Text("معرض الفن", color = RespectPurpleBright, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        items(results.arts, key = { "sr_a_${it.id}" }) { a ->
+                            HazeGlassCard {
+                                Text(a.title, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("الفنان: ${a.artistName}", color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
-                }
-                if (query.isNotBlank() && results.streamers.isEmpty() && results.posts.isEmpty() &&
-                    results.clips.isEmpty() && results.arts.isEmpty()
-                ) {
-                    item {
-                        Surface(
-                            color = RespectSurface,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "لا توجد نتائج مطابقة لـ \"$query\"",
-                                color = TextMuted,
-                                modifier = Modifier.padding(16.dp)
-                            )
+                    if (query.isNotBlank() && results.streamers.isEmpty() && results.posts.isEmpty() &&
+                        results.clips.isEmpty() && results.arts.isEmpty()
+                    ) {
+                        item {
+                            Surface(
+                                color = RespectSurface,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "لا توجد نتائج مطابقة لـ \"$query\"",
+                                    color = TextMuted,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
                         }
                     }
                 }

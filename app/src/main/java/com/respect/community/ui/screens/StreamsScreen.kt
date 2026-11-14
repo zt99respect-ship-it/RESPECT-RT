@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -56,6 +55,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -69,11 +69,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.respect.community.R
 import com.respect.community.data.local.entity.ScheduleEventEntity
 import com.respect.community.data.local.entity.StreamerEntity
 import com.respect.community.ui.components.ErrorRetryState
@@ -89,7 +93,6 @@ import com.respect.community.ui.theme.CyanAccent
 import com.respect.community.ui.theme.GlassBorder
 import com.respect.community.ui.theme.GoldAccent
 import com.respect.community.ui.theme.KickEmerald
-import com.respect.community.ui.theme.RespectPurple
 import com.respect.community.ui.theme.RespectPurpleBright
 import com.respect.community.ui.theme.RespectSurface
 import com.respect.community.ui.theme.TextMuted
@@ -158,18 +161,28 @@ fun StreamsScreen(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         RespectBrandLogo(size = 44.dp, cornerRadius = 12.dp)
-                        Column {
-                            Text("البثوث المباشرة", style = MaterialTheme.typography.headlineMedium)
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "قنوات KICK العامة والخاصة والجدول",
+                                text = "البثوث المباشرة",
+                                style = MaterialTheme.typography.headlineMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "قنوات كيك العامة والخاصة والجدول",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
                         shape = RoundedCornerShape(11.dp),
@@ -181,6 +194,7 @@ fun StreamsScreen(
                             color = KickEmerald,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
+                            maxLines = 1,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
@@ -194,7 +208,11 @@ fun StreamsScreen(
                 ) {
                     Icon(Icons.Rounded.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("إحصائيات RESPECT Charts (Top Viewers & Hours)")
+                    Text(
+                        text = stringResource(R.string.charts_button),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -216,7 +234,10 @@ fun StreamsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
                     GlassFilterChip("الكل (${streamers.size})", selectedSubTab == 0, { selectedSubTab = 0 })
                     GlassFilterChip("مباشر ($liveCount)", selectedSubTab == 1, { selectedSubTab = 1 })
                     GlassFilterChip("الجدول (${scheduleEvents.size})", selectedSubTab == 2, { selectedSubTab = 2 })
@@ -247,7 +268,7 @@ fun StreamsScreen(
                         OutlinedTextField(
                             value = addSlugInput,
                             onValueChange = { addSlugInput = it },
-                            placeholder = { Text("أضف قناة KICK خاصة (مثال: drb7h)", color = TextMuted) },
+                            placeholder = { Text("أضف قناة كيك خاصة (مثال: drb7h)", color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = {
@@ -286,7 +307,13 @@ fun StreamsScreen(
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
                             Checkbox(checked = addAsGlobal, onCheckedChange = { addAsGlobal = it })
-                            Text("إضافة كستريمر عام لجميع الأعضاء (Global)", color = GoldAccent, fontSize = 12.sp)
+                            Text(
+                                text = "إضافة كستريمر عام لجميع الأعضاء",
+                                color = GoldAccent,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
 
@@ -300,7 +327,7 @@ fun StreamsScreen(
                     ) {
                         Icon(Icons.Rounded.TipsAndUpdates, contentDescription = null, tint = RespectPurpleBright)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("اقترح ستريمر جديد للمجتمع", color = TextPrimary)
+                        Text("اقترح ستريمر جديد للمجتمع", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -325,12 +352,14 @@ fun StreamsScreen(
                         ) {
                             RespectBrandLogo(size = 52.dp, cornerRadius = 14.dp, modifier = Modifier.alpha(0.8f))
                             Spacer(modifier = Modifier.height(10.dp))
-                            Text("لا يوجد ستريمرز مطابقون", style = MaterialTheme.typography.titleMedium)
+                            Text("لا يوجد ستريمرز مطابقون", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "أضف اسم قناة KICK بالأعلى أو اختر الكل",
+                                text = "أضف اسم قناة كيك بالأعلى أو اختر الكل",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextMuted
+                                color = TextMuted,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -367,7 +396,8 @@ fun StreamsScreen(
                                         text = streamer.displayName,
                                         style = MaterialTheme.typography.titleMedium,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
                                     )
                                     if (streamer.isLive) LivePulseBadge()
                                     if (streamer.isFeatured) {
@@ -382,7 +412,7 @@ fun StreamsScreen(
                                                 horizontalArrangement = Arrangement.spacedBy(3.dp)
                                             ) {
                                                 Icon(Icons.Rounded.Star, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(11.dp))
-                                                Text("مميز", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                Text("مميز", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                                             }
                                         }
                                     }
@@ -393,7 +423,9 @@ fun StreamsScreen(
                                 Text(
                                     text = "@${streamer.slug} • ${streamer.categoryName}",
                                     color = TextSecondary,
-                                    fontSize = 12.sp
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 if (streamer.characterNames.isNotBlank()) {
                                     Text(
@@ -440,7 +472,8 @@ fun StreamsScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -459,7 +492,9 @@ fun StreamsScreen(
                                             "غير متصل"
                                         },
                                         fontSize = 12.sp,
-                                        color = if (streamer.isLive) TextPrimary else TextMuted
+                                        color = if (streamer.isLive) TextPrimary else TextMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
@@ -477,7 +512,8 @@ fun StreamsScreen(
                                         Text(
                                             text = formatCompactNumber(streamer.followerCount),
                                             fontSize = 12.sp,
-                                            color = TextSecondary
+                                            color = TextSecondary,
+                                            maxLines = 1
                                         )
                                     }
                                 }
@@ -494,7 +530,7 @@ fun StreamsScreen(
                                     },
                                     modifier = Modifier.size(34.dp)
                                 ) {
-                                    Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "رابط KICK", tint = TextSecondary)
+                                    Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "فتح القناة", tint = TextSecondary)
                                 }
 
                                 if (isAdmin || !streamer.isGlobal) {
@@ -513,7 +549,7 @@ fun StreamsScreen(
                                 ScaleBounceButton(onClick = { onWatchStreamer(streamer.slug) }) {
                                     Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text(if (streamer.isLive) "مشاهدة" else "الشات", fontSize = 12.sp)
+                                    Text(if (streamer.isLive) "مشاهدة" else "الشات", fontSize = 12.sp, maxLines = 1)
                                 }
                             }
                         }
@@ -529,7 +565,7 @@ fun StreamsScreen(
                     ) {
                         Icon(Icons.Rounded.Add, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("إضافة موعد بث جديد")
+                        Text("إضافة موعد بث جديد", maxLines = 1)
                     }
                 }
             }
@@ -543,10 +579,16 @@ fun StreamsScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Rounded.CalendarMonth, contentDescription = null, tint = RespectPurpleBright)
-                            Text(event.streamerName, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = event.streamerName,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         if (isAdmin) {
                             Row {
@@ -570,7 +612,9 @@ fun StreamsScreen(
                             text = "${event.scheduledDate} • ${event.scheduledTime} • ${event.gameCategory}",
                             color = CyanAccent,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -632,31 +676,40 @@ private fun SuggestStreamerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = RespectSurface,
-        title = { Text("اقتراح ستريمر جديد", color = TextPrimary) },
+        title = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Text("اقتراح ستريمر جديد", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = kickUser,
-                    onValueChange = { kickUser = it },
-                    label = { Text("اسم المستخدم في KICK") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = characters,
-                    onValueChange = { characters = it },
-                    label = { Text("أسماء الشخصيات في السيرفر") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    label = { Text("ملاحظة أو سبب الاقتراح") }
-                )
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = kickUser,
+                        onValueChange = { kickUser = it },
+                        label = { Text("اسم المستخدم في كيك") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = characters,
+                        onValueChange = { characters = it },
+                        label = { Text("أسماء الشخصيات في السيرفر") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = reason,
+                        onValueChange = { reason = it },
+                        label = { Text("ملاحظة أو سبب الاقتراح") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
             ScaleBounceButton(onClick = { onSubmit(kickUser, characters, reason) }) {
-                Text("إرسال الاقتراح")
+                Text("إرسال الاقتراح", maxLines = 1)
             }
         },
         dismissButton = {
@@ -675,26 +728,32 @@ fun ScheduleEditorDialog(
     var name by remember { mutableStateOf(existing?.streamerName.orEmpty()) }
     var date by remember { mutableStateOf(existing?.scheduledDate ?: "غداً") }
     var time by remember { mutableStateOf(existing?.scheduledTime ?: "22:00") }
-    var category by remember { mutableStateOf(existing?.gameCategory ?: "GTA RP") }
+    var category by remember { mutableStateOf(existing?.gameCategory ?: "تقمص الأدوار") }
     var prediction by remember { mutableStateOf(existing?.predictionNote.orEmpty()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = RespectSurface,
-        title = { Text(if (existing == null) "إضافة موعد بث" else "تعديل موعد البث", color = TextPrimary) },
+        title = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Text(if (existing == null) "إضافة موعد بث" else "تعديل موعد البث", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("اسم الستريمر") }, singleLine = true)
-                OutlinedTextField(value = slug, onValueChange = { slug = it }, label = { Text("معرّف KICK") }, singleLine = true)
-                OutlinedTextField(value = date, onValueChange = { date = it }, label = { Text("التاريخ") }, singleLine = true)
-                OutlinedTextField(value = time, onValueChange = { time = it }, label = { Text("الوقت") }, singleLine = true)
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("اللعبة / التصنيف") }, singleLine = true)
-                OutlinedTextField(value = prediction, onValueChange = { prediction = it }, label = { Text("التوقعات قبل البث") })
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("اسم الستريمر") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = slug, onValueChange = { slug = it }, label = { Text("معرّف القناة في كيك") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = date, onValueChange = { date = it }, label = { Text("التاريخ") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = time, onValueChange = { time = it }, label = { Text("الوقت") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("اللعبة / التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = prediction, onValueChange = { prediction = it }, label = { Text("التوقعات قبل البث") }, modifier = Modifier.fillMaxWidth())
+                }
             }
         },
         confirmButton = {
             ScaleBounceButton(onClick = { onSave(existing?.id ?: 0L, slug, name, date, time, category, prediction) }) {
-                Text("حفظ")
+                Text("حفظ", maxLines = 1)
             }
         },
         dismissButton = {

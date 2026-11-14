@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -47,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -59,10 +59,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.respect.community.R
 import com.respect.community.data.local.entity.AnalysisEntity
 import com.respect.community.data.local.entity.ChatMessageEntity
 import com.respect.community.data.local.entity.TimelinePostEntity
@@ -73,6 +78,9 @@ import com.respect.community.ui.components.ScaleBounceButton
 import com.respect.community.ui.components.ShimmerCardSkeleton
 import com.respect.community.ui.components.TelegraphImagePickerButton
 import com.respect.community.ui.components.VideoLinkPlayer
+import com.respect.community.ui.components.VideoUrlType
+import com.respect.community.ui.components.detectVideoUrlType
+import com.respect.community.ui.components.extractFirstVideoUrl
 import com.respect.community.ui.theme.GlassBorder
 import com.respect.community.ui.theme.GoldAccent
 import com.respect.community.ui.theme.RespectPurple
@@ -160,7 +168,13 @@ fun TimelineFeedContent(
                         border = BorderStroke(1.dp, GlassBorder),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("تحميل 10 منشورات إضافية", color = TextPrimary, fontSize = 13.sp)
+                        Text(
+                            text = "تحميل 10 منشورات إضافية",
+                            color = TextPrimary,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
@@ -202,13 +216,17 @@ fun GeneralChatContent(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = msg.senderName,
                                 color = nameColor,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
                             if (msg.isAdmin) {
                                 Surface(
@@ -216,9 +234,10 @@ fun GeneralChatContent(
                                     color = RespectPurple.copy(alpha = 0.24f)
                                 ) {
                                     Text(
-                                        "إدارة",
+                                        text = "إدارة",
                                         color = RespectPurpleBright,
                                         fontSize = 10.sp,
+                                        maxLines = 1,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
@@ -248,7 +267,7 @@ fun GeneralChatContent(
         HazeGlassCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             cornerRadius = 18.dp,
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
         ) {
@@ -259,7 +278,7 @@ fun GeneralChatContent(
                 OutlinedTextField(
                     value = chatInput,
                     onValueChange = { chatInput = it },
-                    placeholder = { Text("سولف مع مجتمع RESPECT...", color = TextMuted) },
+                    placeholder = { Text("سولف مع مجتمع ريسبكت...", color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
@@ -309,7 +328,10 @@ fun StreamAnalysisContent(
                         text = "${item.streamerName} • ${item.authorName}",
                         color = RespectPurpleBright,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -322,7 +344,8 @@ fun StreamAnalysisContent(
                             " ${item.rating}/10",
                             color = GoldAccent,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 13.sp,
+                            maxLines = 1
                         )
                         if (isAdmin) {
                             IconButton(
@@ -340,7 +363,12 @@ fun StreamAnalysisContent(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(item.title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(item.analysisText, style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
             }
@@ -358,6 +386,20 @@ private fun TimelinePostCard(
     onBanOneDay: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+
+    val resolvedMediaUrl = remember(post.mediaUrl, post.content) {
+        post.mediaUrl.trim().ifBlank { extractFirstVideoUrl(post.content).orEmpty() }
+    }
+    val detectedMediaType = remember(resolvedMediaUrl) {
+        if (resolvedMediaUrl.isBlank()) VideoUrlType.WEB_FALLBACK else detectVideoUrlType(resolvedMediaUrl)
+    }
+    val isVideoPost = post.mediaType == "VIDEO" || (
+        resolvedMediaUrl.isNotBlank() && (
+            detectedMediaType == VideoUrlType.TIKTOK ||
+                detectedMediaType == VideoUrlType.TWITTER_X ||
+                detectedMediaType == VideoUrlType.DIRECT_MEDIA
+            )
+        )
 
     HazeGlassCard(isGlowing = post.isOfficialAnnouncement || post.isPinned) {
         if (post.isPinned || post.isOfficialAnnouncement) {
@@ -377,7 +419,7 @@ private fun TimelinePostCard(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(Icons.Rounded.PushPin, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(14.dp))
-                            Text("منشور مثبّت", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("منشور مثبّت", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                     }
                 }
@@ -393,7 +435,7 @@ private fun TimelinePostCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(Icons.Rounded.Campaign, contentDescription = null, tint = RespectPurpleBright, modifier = Modifier.size(15.dp))
-                            Text("إعلان رسمي من RESPECT", color = RespectPurpleBright, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("إعلان رسمي من ريسبكت", color = RespectPurpleBright, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -407,7 +449,8 @@ private fun TimelinePostCard(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
             ) {
                 RespectImage(
                     url = post.authorAvatarUrl,
@@ -416,16 +459,20 @@ private fun TimelinePostCard(
                         .size(40.dp)
                         .clip(CircleShape)
                 )
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = post.authorName,
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (post.isAdminPost) RespectPurpleBright else TextPrimary
+                        color = if (post.isAdminPost) RespectPurpleBright else TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = post.authorIdentifier,
                         color = TextMuted,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -476,19 +523,19 @@ private fun TimelinePostCard(
             Text(post.content, style = MaterialTheme.typography.bodyLarge)
         }
 
-        if (post.mediaUrl.isNotBlank()) {
+        if (resolvedMediaUrl.isNotBlank()) {
             Spacer(modifier = Modifier.height(10.dp))
-            if (post.mediaType == "VIDEO") {
+            if (isVideoPost) {
                 VideoLinkPlayer(
-                    videoUrl = post.mediaUrl,
+                    videoUrl = resolvedMediaUrl,
                     autoPlay = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp)
+                        .height(235.dp)
                 )
             } else {
                 RespectImage(
-                    url = post.mediaUrl,
+                    url = resolvedMediaUrl,
                     contentDescription = "صورة المنشور",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -508,7 +555,7 @@ private fun TimelinePostCard(
                     tint = if (post.isLikedByMe) Color(0xFFF43F5E) else TextMuted
                 )
             }
-            Text("${post.likesCount}", color = TextSecondary, fontSize = 13.sp)
+            Text("${post.likesCount}", color = TextSecondary, fontSize = 13.sp, maxLines = 1)
         }
     }
 }
@@ -528,54 +575,63 @@ fun ComposeTimelineDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = RespectSurface,
-        title = { Text("منشور جديد في التايملاين", color = TextPrimary) },
+        title = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Text("منشور جديد في التايملاين", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("اكتب تغريدتك للمجتمع...") },
-                    minLines = 3
-                )
-                TelegraphImagePickerButton(
-                    label = "ضغط ورفع صورة عبر Telegraph",
-                    onUploadImage = onUploadImage,
-                    onUploadedUrl = { url ->
-                        mediaUrl = url
-                        mediaType = "IMAGE"
-                    }
-                )
-                OutlinedTextField(
-                    value = mediaUrl,
-                    onValueChange = {
-                        mediaUrl = it
-                        val lower = it.lowercase()
-                        if (lower.contains("tiktok.com") || lower.contains("x.com") || lower.contains("twitter.com") ||
-                            lower.endsWith(".mp4") || lower.contains(".m3u8")
-                        ) {
-                            mediaType = "VIDEO"
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = { content = it },
+                        label = { Text("اكتب تغريدتك للمجتمع...") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TelegraphImagePickerButton(
+                        label = stringResource(R.string.upload_via_telegraph),
+                        onUploadImage = onUploadImage,
+                        onUploadedUrl = { url ->
+                            mediaUrl = url
+                            mediaType = "IMAGE"
                         }
-                    },
-                    label = { Text("رابط صورة أو فيديو (TikTok / X / MP4 / HLS)") },
-                    singleLine = true
-                )
-                if (mediaUrl.isNotBlank()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GlassFilterChip("صورة", mediaType == "IMAGE", { mediaType = "IMAGE" })
-                        GlassFilterChip("فيديو", mediaType == "VIDEO", { mediaType = "VIDEO" })
+                    )
+                    OutlinedTextField(
+                        value = mediaUrl,
+                        onValueChange = { raw ->
+                            mediaUrl = raw
+                            val detected = detectVideoUrlType(raw)
+                            if (detected == VideoUrlType.TIKTOK ||
+                                detected == VideoUrlType.TWITTER_X ||
+                                detected == VideoUrlType.DIRECT_MEDIA
+                            ) {
+                                mediaType = "VIDEO"
+                            }
+                        },
+                        label = { Text(stringResource(R.string.media_links_hint), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (mediaUrl.isNotBlank()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GlassFilterChip("صورة", mediaType == "IMAGE", { mediaType = "IMAGE" })
+                            GlassFilterChip("فيديو", mediaType == "VIDEO", { mediaType = "VIDEO" })
+                        }
                     }
-                }
-                if (isAdmin) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = isAnnouncement, onCheckedChange = { isAnnouncement = it })
-                        Text("نشر كإعلان رسمي مثبت", color = RespectPurpleBright)
+                    if (isAdmin) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = isAnnouncement, onCheckedChange = { isAnnouncement = it })
+                            Text("نشر كإعلان رسمي مثبت", color = RespectPurpleBright, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            ScaleBounceButton(onClick = { onPublish(content, mediaUrl, mediaType, isAnnouncement) }) {
-                Text("نشر الآن")
+            ScaleBounceButton(onClick = { onPublish(content, mediaUrl.trim(), mediaType, isAnnouncement) }) {
+                Text("نشر الآن", maxLines = 1)
             }
         },
         dismissButton = {
@@ -597,19 +653,25 @@ fun AddAnalysisDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = RespectSurface,
-        title = { Text("إضافة تحليل لبث", color = TextPrimary) },
+        title = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Text("إضافة تحليل لبث", color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = streamerName, onValueChange = { streamerName = it }, label = { Text("اسم الستريمر") }, singleLine = true)
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان التحليل") }, singleLine = true)
-                OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("رأيك وتحليلك للبث") }, minLines = 3)
-                Text("التقييم: ${rating.roundToInt()}/10", color = GoldAccent, fontWeight = FontWeight.Bold)
-                Slider(value = rating, onValueChange = { rating = it }, valueRange = 1f..10f, steps = 8)
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = streamerName, onValueChange = { streamerName = it }, label = { Text("اسم الستريمر") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان التحليل") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("رأيك وتحليلك للبث") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                    Text("التقييم: ${rating.roundToInt()}/10", color = GoldAccent, fontWeight = FontWeight.Bold)
+                    Slider(value = rating, onValueChange = { rating = it }, valueRange = 1f..10f, steps = 8)
+                }
             }
         },
         confirmButton = {
             ScaleBounceButton(onClick = { onSave(streamerName, streamerName, title, body, rating.roundToInt()) }) {
-                Text("نشر التحليل")
+                Text("نشر التحليل", maxLines = 1)
             }
         },
         dismissButton = {

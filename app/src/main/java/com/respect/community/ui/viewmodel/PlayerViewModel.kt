@@ -45,17 +45,17 @@ data class VideoQualityOption(
     companion object {
         val AUTO = VideoQualityOption(
             id = "auto",
-            label = "تلقائي (Auto)",
+            label = "تلقائي",
             maxWidth = Int.MAX_VALUE,
             maxHeight = Int.MAX_VALUE
         )
 
         val DEFAULT_PRESETS = listOf(
             AUTO,
-            VideoQualityOption("1080p", "1080p Full HD", 1920, 1080),
-            VideoQualityOption("720p", "720p HD", 1280, 720),
-            VideoQualityOption("480p", "480p SD", 854, 480),
-            VideoQualityOption("360p", "360p توفير", 640, 360)
+            VideoQualityOption("1080p", "دقة عالية 1080", 1920, 1080),
+            VideoQualityOption("720p", "دقة متوسطة 720", 1280, 720),
+            VideoQualityOption("480p", "دقة قياسية 480", 854, 480),
+            VideoQualityOption("360p", "توفير 360", 640, 360)
         )
     }
 }
@@ -221,9 +221,10 @@ class PlayerViewModel(
                     val width = format.width
                     if (height > 0 && width > 0) {
                         val label = when {
-                            height >= 1080 -> "${height}p Full HD"
-                            height >= 720 -> "${height}p HD"
-                            else -> "${height}p"
+                            height >= 1080 -> "دقة عالية ${height}"
+                            height >= 720 -> "دقة متوسطة ${height}"
+                            height >= 480 -> "دقة قياسية ${height}"
+                            else -> "توفير ${height}"
                         }
                         detected.add(
                             VideoQualityOption(

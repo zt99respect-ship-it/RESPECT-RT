@@ -37,7 +37,7 @@ android {
 
         buildConfigField("String", "KICK_CLIENT_ID", "\"01M73WDEYD7WMR9TG5X63CTQ54\"")
         buildConfigField("String", "KICK_CLIENT_SECRET", "\"755f654101e5fe8ec563cd844931618e095924bdbb631b263191c9abb63779c4\"")
-        buildConfigField("String", "KICK_REDIRECT_URI", "\"https://docs.kick.com\"")
+        buildConfigField("String", "KICK_REDIRECT_URI", "\"respect://oauth/callback\"")
         buildConfigField("String", "ADMIN_EMAIL", "\"zt.99.respect@gmail.com\"")
         buildConfigField("String", "ADMIN_PASSWORD", "\"Slayer_rt\"")
 

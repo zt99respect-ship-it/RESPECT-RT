@@ -11,7 +11,7 @@ class RespectFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        val app = application as? RespectCommunityApp ?: return
+        val app = applicationContext as? RespectCommunityApp ?: return
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { app.container.repository.syncFcmToken(token) }
         }
@@ -19,22 +19,21 @@ class RespectFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        val streamerName = message.data["streamerName"].orEmpty()
-        val streamTitle = message.data["streamTitle"].orEmpty()
-        val slug = message.data["slug"].orEmpty()
-
         val title = message.notification?.title
-            ?: if (streamerName.isNotBlank()) "$streamerName بدأ بثه" else "إشعار RESPECT"
+            ?: message.data["title"]
+            ?: "تنبيه مجتمع ريسبكت"
         val body = message.notification?.body
-            ?: if (streamTitle.isNotBlank()) "العنوان: $streamTitle" else message.data["body"].orEmpty()
+            ?: message.data["body"]
+            ?: "تحديث جديد من البثوث المباشرة"
+        val slug = message.data["slug"]
 
-        if (title.isNotBlank() || body.isNotBlank()) {
-            NotificationHelper.showCustomKickPush(
-                context = applicationContext,
-                title = title,
-                body = body,
-                slug = slug
-            )
-        }
+        NotificationHelper.showCustomKickPush(
+            context = applicationContext,
+            title = title,
+            body = body,
+            slug = slug,
+            playSound = true,
+            vibrate = true
+        )
     }
 }

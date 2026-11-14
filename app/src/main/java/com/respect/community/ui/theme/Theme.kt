@@ -1,17 +1,21 @@
 package com.respect.community.ui.theme
 
 import android.app.Activity
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.respect.community.R
@@ -74,7 +78,12 @@ fun RespectCommunityTheme(content: @Composable () -> Unit) {
 
     MaterialTheme(
         colorScheme = RespectDarkColorScheme,
-        typography = RespectTypography,
-        content = content
-    )
+        typography = RespectTypography
+    ) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides LayoutDirection.Rtl,
+            LocalTextStyle provides RespectTypography.bodyLarge,
+            content = content
+        )
+    }
 }

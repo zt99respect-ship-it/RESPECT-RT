@@ -1,8 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">مجتمع RESPECT</string>
+    <string name="app_name">مجتمع ريسبكت</string>
+    <string name="brand_short">ريسبكت</string>
+    <string name="brand_full">مجتمع ريسبكت الرسمي</string>
     <string name="channel_live_name">تنبيهات البث المباشر</string>
     <string name="channel_live_desc">إشعارات فورية بصوت واهتزاز عند بدء بث الستريمرز المفضلين</string>
     <string name="channel_monitor_name">مراقبة البث بالخلفية</string>
-    <string name="channel_monitor_desc">خدمة فحص حالة البث كل 15 ثانية عبر KICK API</string>
+    <string name="channel_monitor_desc">خدمة فحص حالة البث كل 15 ثانية عبر منصة كيك</string>
+    <string name="tab_streams">البثوث</string>
+    <string name="tab_community">المجتمع</string>
+    <string name="tab_profile">حسابي</string>
+    <string name="charts_title">إحصائيات ريسبكت</string>
+    <string name="charts_subtitle">أعلى المشاهدين وساعات البث كل 10 دقائق</string>
+    <string name="charts_button">إحصائيات ريسبكت (أعلى المشاهدات والساعات)</string>
+    <string name="upload_via_telegraph">ضغط ورفع صورة عبر تيليغراف</string>
+    <string name="upload_avatar_telegraph">رفع الصورة الشخصية عبر تيليغراف</string>
+    <string name="upload_banner_telegraph">رفع صورة الغلاف عبر تيليغراف</string>
+    <string name="send_test_notification">إرسال إشعار تجريبي (DRB7H بدأ بثه)</string>
+    <string name="kick_login_button">تسجيل الدخول عبر كيك</string>
+    <string name="quality_auto">تلقائي</string>
+    <string name="quality_1080p">دقة عالية 1080</string>
+    <string name="quality_720p">دقة متوسطة 720</string>
+    <string name="quality_480p">دقة قياسية 480</string>
+    <string name="quality_360p">توفير البيانات 360</string>
+    <string name="video_links_hint">رابط الفيديو (تيك توك / إكس / رابط مباشر)</string>
+    <string name="media_links_hint">رابط صورة أو فيديو (تيك توك / إكس / رابط مباشر)</string>
+    <string name="search_placeholder">ابحث في البثوث والمنشورات والكليبات والفن...</string>
 </resources>
